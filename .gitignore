@@ -1,0 +1,6 @@
+*.vs
+*.vcxproj.filters
+*.vcxproj.user
+*/x64/
+x64/
+out/
