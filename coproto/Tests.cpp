@@ -15,12 +15,17 @@ namespace coproto
 		t.add("arraySendRecvTest           ", tests::arraySendRecvTest);
 		t.add("basicSendRecvTest           ", tests::strSendRecvTest);
 		t.add("resizeSendRecvTest          ", tests::resizeSendRecvTest);
+		t.add("moveSendRecvTest            ", tests::moveSendRecvTest);
+		t.add("typedRecvTest               ", tests::typedRecvTest);
+		t.add("nestedProtocolTest          ", tests::nestedProtocolTest);
+
 		t.add("zeroSendRecvTest            ", tests::zeroSendRecvTest);
 		t.add("zeroSendErrorCodeTest       ", tests::zeroSendErrorCodeTest);
 		t.add("badRecvSizeTest             ", tests::badRecvSizeTest);
 		t.add("badRecvSizeErrorCodeTest    ", tests::badRecvSizeErrorCodeTest);
 		t.add("throwsTest                  ", tests::throwsTest);
 
+		t.add("nestedProtocolThrowTest     ", tests::nestedProtocolThrowTest);
 
 		});
 }

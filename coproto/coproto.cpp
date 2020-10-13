@@ -1,6 +1,7 @@
 ﻿#include "coproto.h"
 #include "Tests.h"
 #include <array>
+#include "cryptoTools/Common/CLP.h"
 
 namespace coproto
 {
@@ -9,7 +10,7 @@ namespace coproto
 
 
 	bool RecvAwaiter::await_ready() {
-		mEc = mHandle.promise().mSched->recv(mHandle.promise().mId, *mRecv.mStorage.get());
+		mEc = mHandle.promise().mSched->recv(*mRecv.mStorage.get());
 
 		// we have a result (message or error) so long as 
 		// we done have a no_message_available code.
@@ -23,7 +24,6 @@ namespace coproto
 			//mHasResult = false;
 			return false;
 		}
-
 		return mHasResult;
 	}
 
@@ -36,7 +36,7 @@ namespace coproto
 	}
 
 	bool SendAwaiter::await_ready() {
-		mEc = mHandle.promise().mSched->send(mHandle.promise().mId, *mData.mStorage.get());
+		mEc = mHandle.promise().mSched->send(*mData.mStorage.get());
 
 		// we have a result (message or error) so long as 
 		// we done have a no_message_available code.
@@ -61,12 +61,12 @@ namespace coproto
 		}
 	}
 
-	error_code InterlaceScheduler::recv(oc::u64 id, Buffer& buff)
+	error_code LocalScheduler::Sched::recv(Buffer& buff)
 	{
 		error_code ec;
-		if (mBuffs[id].size())
+		if (mSched->mBuffs[mIdx].size())
 		{
-			auto& front = mBuffs[id].front();
+			auto& front = mSched->mBuffs[mIdx].front();
 			if(buff.asSpan().size() != front.size())
 				ec = buff.tryResize(front.size());
 
@@ -74,7 +74,7 @@ namespace coproto
 			{
 				auto data = buff.asSpan();
 				std::memcpy(data.data(), front.data(), data.size());
-				mBuffs[id].pop_front();
+				mSched->mBuffs[mIdx].pop_front();
 			}
 		}
 		else
@@ -85,35 +85,99 @@ namespace coproto
 		return ec;
 	}
 
-	error_code InterlaceScheduler::send(oc::u64 id, Buffer& buff)
+	error_code LocalScheduler::Sched::send(Buffer& buff)
 	{
 		auto data = buff.asSpan();
 		if (data.size() == 0)
 			return code::sendLengthZeroMsg;
 
-		mBuffs[id ^ 1].emplace_back(data.begin(), data.end());
+		mSched->mBuffs[mIdx ^ 1].emplace_back(data.begin(), data.end());
 		return {};
 	}
 
-	error_code InterlaceScheduler::execute(Proto& p0, Proto& p1)
+	void LocalScheduler::Sched::addProto(ProtoAwaiter& proto)
 	{
-		p0.setScheduler(*this, 0);
-		p1.setScheduler(*this, 1);
+		mStack.push_back({ &proto.mProto, &proto });
+		proto.mProto.mHandle.promise().mSched = this;
+
+		runOne();
+	}
+
+	void LocalScheduler::Sched::runOne()
+	{
+		if (mStack.back().mProto->done() == false)
+		{
+			mStack.back().mProto->resume();
+		}
+
+		if (mStack.back().mProto->done())
+		{
+			if (mStack.size() > 1 && 
+				mStack.back().mProto->getErrorCode())
+			{
+				auto& child = mStack.back().mProto->mHandle.promise();
+				auto& awaiter = *mStack.back().mAwaiter;
+
+				if (awaiter.mReturnErrors == false)
+				{
+					auto& parent = mStack[mStack.size() - 2].mProto->mHandle.promise();
+					parent.mExPtr = std::move(child.mExPtr);
+					parent.setError(child.mEc);
+				}
+			}
+			mStack.pop_back();
+			
+
+			if (mStack.size())
+			{
+				runOne();
+			}
+		}
+
+	}
+
+	error_code LocalScheduler::execute(Proto& p0, Proto& p1)
+	{
+		mScheds[0].mIdx = 0; 
+		mScheds[0].mSched = this;
+		mScheds[1].mIdx = 1;
+		mScheds[1].mSched = this;
+
+		mScheds[0].mStack.emplace_back(&p0, nullptr);
+		mScheds[1].mStack.emplace_back(&p1, nullptr);
+		p0.setScheduler(mScheds[0]);
+		p1.setScheduler(mScheds[1]);
 
 		while (!p0.done() || !p1.done())
 		{
 
 			if (!p0.done())
 			{
-				p0.resume();
+				mScheds[0].runOne();
+					
+					//mStack.back()->resume();
+				//p0.resume();
 				if (p0.getErrorCode())
 					return p0.getErrorCode();
+
+				//if (mScheds[1].mStack.back()->done())
+				//{
+				//	std::cout << "done 0 " << std::endl;
+				//}
 			}
 			if (!p1.done())
 			{
-				p1.resume();
+				mScheds[1].runOne();
+
+				//mScheds[1].mStack.back()->resume();
+				////p1.resume();
 				if (p1.getErrorCode())
 					return p1.getErrorCode();
+
+				//if (mScheds[1].mStack.back()->done())
+				//{
+				//	std::cout << "done 1 " << std::endl;
+				//}
 			}
 		}
 
@@ -123,9 +187,59 @@ namespace coproto
 
 	Proto ProtoPromise::get_return_object() { return Proto{ *this }; }
 
+	ProtoAwaiter ProtoPromise::await_transform(Proto&& p)
+	{
+		return ProtoAwaiter(std::coroutine_handle<ProtoPromise>::from_promise(*this), std::move(p));
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	namespace tests
 	{
-
 		void strSendRecvTest()
 		{
 			auto proto = [](bool party) -> Proto{
@@ -156,13 +270,11 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error(ec.message());
-
 		}
-
 
 		void arraySendRecvTest()
 		{
@@ -205,12 +317,11 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
-
 
 
 		void intSendRecvTest()
@@ -223,15 +334,12 @@ namespace coproto
 					{
 						auto msg = i * 2;
 						co_await send(msg);
-
 						co_await receive(msg);
-
 					}
 					else
 					{
 						u64 msg;
 						co_await receive(msg);
-
 						msg = i * 2 + 1;
 						co_await send(msg);
 					}
@@ -239,13 +347,11 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
-
-
 
 		void resizeSendRecvTest()
 		{
@@ -285,10 +391,149 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error(ec.message());
+		}
+
+		void moveSendRecvTest()
+		{
+			auto proto = [](bool party) -> Proto {
+
+				std::vector<u64> buff, rBuff;
+				for (oc::u64 i = 0; i < 5; ++i)
+				{
+					if (party)
+					{
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+						co_await send(std::move(buff));
+						co_await receive(rBuff);
+
+						buff.resize(2 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+					}
+					else
+					{
+						co_await receive(rBuff);
+
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+
+						buff.resize(buff.size() + 1);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+						co_await send(std::move(buff));
+					}
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
+
+		void typedRecvTest()
+		{
+			auto proto = [](bool party) -> Proto {
+
+				std::vector<u64> buff, rBuff;
+				for (oc::u64 i = 0; i < 5; ++i)
+				{
+					if (party)
+					{
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+						co_await send(std::move(buff));
+						rBuff = co_await receive<std::vector<u64>>();
+
+						buff.resize(2 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+					}
+					else
+					{
+						rBuff = co_await receiveVec<u64>();
+
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+
+						buff.resize(buff.size() + 1);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+						co_await send(std::move(buff));
+					}
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
+
+		Proto echoServer(int i)
+		{
+			auto msg = co_await receive<std::string>();
+			co_await send(std::move(msg));
+
+			if (i)
+			{
+				echoServer(i - 1);
+			}
+		}
+		Proto echoClient(int i)
+		{
+			auto msg = std::string("hello world");
+			co_await send(msg);
+			if (msg != co_await receive<std::string>())
+			{
+				throw std::runtime_error("hello world");
+			}
+
+			if (i)
+			{
+				echoClient(i - 1);
+			}
+		}
+
+
+		void nestedProtocolTest()
+		{
+			auto proto = [](bool party) -> Proto {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+					co_await echoServer(4);
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await receive(buff);
+					co_await echoClient(4);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error("");
 		}
 
 
@@ -301,7 +546,7 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (!ec)
 				throw std::runtime_error("");
@@ -326,7 +571,7 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec != code::noResizeSupport)
 				throw std::runtime_error(ec.message());
@@ -345,7 +590,7 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error("");
@@ -373,13 +618,11 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec)
 				throw std::runtime_error("");
 		}
-
-
 
 		void throwsTest()
 		{
@@ -390,20 +633,74 @@ namespace coproto
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
-			InterlaceScheduler sched;
+			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (!ec)
 				throw std::runtime_error("");
 		}
 
+		Proto throwServer(int i)
+		{
+			auto msg = co_await receive<std::string>();
+			co_await send(std::move(msg));
+
+			if (i)
+				co_await throwServer(i - 1);
+			else
+				throw std::runtime_error("");
+		}
+		Proto throwClient(int i)
+		{
+			auto msg = std::string("hello world");
+			co_await send(msg);
+			if (msg != co_await receive<std::string>())
+			{
+				throw std::runtime_error("hello world");
+			}
+
+			if (i)
+				co_await throwClient(i - 1);
+		}
+
+		void nestedProtocolThrowTest()
+		{
+			auto proto = [](bool party) -> Proto {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+					co_await throwServer(4);
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await receive(buff);
+					co_await throwClient(4);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (!ec)
+				throw std::runtime_error("");
+		}
+
+
+
 	}
 }
 
 
-int main()
+int main(int argc, char** argv)
 {
-	
-	coproto::testCollection.runAll();
+	oc::CLP cmd(argc, argv);
+
+	if (cmd.isSet("u") == false)
+		cmd.set("u");
+
+	coproto::testCollection.runIf(cmd);
 
 
 	return 0;
