@@ -98,7 +98,7 @@ namespace coproto
 	void LocalScheduler::Sched::addProto(ProtoAwaiter& proto)
 	{
 		mStack.push_back({ &proto.mProto, &proto });
-		proto.mProto.mHandle.promise().mSched = this;
+		proto.mProto.mHandle.get().promise().mSched = this;
 
 		runOne();
 	}
@@ -115,12 +115,12 @@ namespace coproto
 			if (mStack.size() > 1 && 
 				mStack.back().mProto->getErrorCode())
 			{
-				auto& child = mStack.back().mProto->mHandle.promise();
+				auto& child = mStack.back().mProto->mHandle.get().promise();
 				auto& awaiter = *mStack.back().mAwaiter;
 
 				if (awaiter.mReturnErrors == false)
 				{
-					auto& parent = mStack[mStack.size() - 2].mProto->mHandle.promise();
+					auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
 					parent.mExPtr = std::move(child.mExPtr);
 					parent.setError(child.mEc);
 				}
@@ -189,7 +189,12 @@ namespace coproto
 
 	ProtoAwaiter ProtoPromise::await_transform(Proto&& p)
 	{
-		return ProtoAwaiter(std::coroutine_handle<ProtoPromise>::from_promise(*this), std::move(p));
+		return ProtoAwaiter(std::coroutine_handle<ProtoPromise>::from_promise(*this), std::move(p.mHandle));
+	}
+
+	EcProtoAwaiter ProtoPromise::await_transform(EcProto&& p)
+	{
+		return EcProtoAwaiter(std::coroutine_handle<ProtoPromise>::from_promise(*this), std::move(p));
 	}
 
 
@@ -664,6 +669,7 @@ namespace coproto
 
 		void nestedProtocolThrowTest()
 		{
+			
 			auto proto = [](bool party) -> Proto {
 
 				if (party)
@@ -684,6 +690,38 @@ namespace coproto
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (!ec)
+				throw std::runtime_error("");
+		}
+
+
+		void nestedProtocolErrorCodeTest()
+		{
+			bool hasEc = false;
+			u64 n = 0;
+			auto proto = [&hasEc, n](bool party) -> Proto {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+					auto ec = co_await throwServer(n).getErrorCode();
+					if (ec)
+					{
+						hasEc = true;
+					}
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await receive(buff);
+					co_await throwClient(n);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec||!hasEc)
 				throw std::runtime_error("");
 		}
 

@@ -26,6 +26,7 @@ namespace coproto
 		t.add("throwsTest                  ", tests::throwsTest);
 
 		t.add("nestedProtocolThrowTest     ", tests::nestedProtocolThrowTest);
+		t.add("nestedProtocolErrorCodeTest ", tests::nestedProtocolErrorCodeTest);
 
-		});
+		}); 
 }

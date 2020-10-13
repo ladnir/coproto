@@ -20,7 +20,9 @@ namespace coproto
 	std::string hexPtr(void* p);
 
 	class Proto;
+	struct EcProto;
 	struct ProtoAwaiter;
+	struct EcProtoAwaiter;
 
 	class Scheduler
 	{
@@ -282,6 +284,91 @@ namespace coproto
 		}
 
 		ProtoAwaiter await_transform(Proto&&);
+
+		EcProtoAwaiter await_transform(EcProto&&);
+	};
+
+	template<typename Handle>
+	struct SharedHandle
+	{
+
+		struct ControlBlock
+		{
+			Handle mHandle;
+			u64 mCount = 1;
+
+			ControlBlock(Handle handle)
+				: mHandle(std::move(handle))
+			{}
+		};
+
+		ControlBlock* mHandle = nullptr;
+
+		SharedHandle(Handle handle)
+			: mHandle(new ControlBlock(std::move(handle)))
+		{ 
+			//std::hash<Handle> h;
+			//std::cout << " SharedHandle " << h(mHandle->mHandle) << std::endl;
+
+		}
+
+		SharedHandle() = default;
+
+		SharedHandle(const SharedHandle& o)
+			: mHandle(o.mHandle)
+		{ 
+			if(mHandle)
+				++mHandle->mCount;
+		}
+
+		SharedHandle(SharedHandle&& o)
+			: mHandle(o.mHandle)
+		{
+			o.mHandle = nullptr;
+		}
+
+		~SharedHandle()
+		{
+			if (mHandle && --mHandle->mCount == 0)
+			{
+				//std::hash<Handle> h;
+				//std::cout << " ~SharedHandle " << h(mHandle->mHandle) << std::endl;
+				mHandle->mHandle.destroy();
+				delete mHandle;
+			}
+		}
+
+		Handle& get()
+		{
+			assert(mHandle);
+			return mHandle->mHandle;
+		}
+		const Handle& get()const
+		{
+			assert(mHandle);
+			return mHandle->mHandle;
+		}
+
+		operator bool() const
+		{
+			return mHandle != nullptr;
+		}
+	};
+
+	struct EcProto
+	{
+		using coro_handle = std::coroutine_handle<ProtoPromise>;
+		SharedHandle<coro_handle> mHandle;
+
+		operator error_code() const
+		{
+			return mHandle.get().promise().mEc;
+		}
+
+		operator bool() const
+		{
+			return static_cast<bool>(mHandle.get().promise().mEc);
+		}
 	};
 
 
@@ -293,52 +380,52 @@ namespace coproto
 
 		using promise_type = ProtoPromise;
 		using coro_handle = std::coroutine_handle<ProtoPromise>;
-		coro_handle mHandle;
+		SharedHandle<coro_handle> mHandle;
 		Proto(ProtoPromise& prom)
 			:mHandle(coro_handle::from_promise(prom))
-		{ 
+		{
+			//std::cout << " Proto " << hexPtr(this) << std::endl;
+		}
+		Proto(SharedHandle<coro_handle>&& prom)
+			:mHandle(std::move(prom))
+		{
 			//std::cout << " Proto " << hexPtr(this) << std::endl;
 		}
 
+
 		Proto(const Proto& proto) = delete;
 		Proto(Proto&& p)
-			: mHandle(p.mHandle)
+			: mHandle(std::move(p.mHandle))
 		{
-			p.mHandle = nullptr;
 		}
 
 		~Proto()
 		{
-			//std::cout << " ~Proto " << hexPtr(this) << std::endl;
-			if (mHandle)
-			{
-				//assert(mHandle.done());
-				mHandle.destroy();
-			}
+
 		}
 
 		void setScheduler(Scheduler& sched)
 		{
-			mHandle.promise().mSched = &sched;
+			mHandle.get().promise().mSched = &sched;
 		}
 
-		error_code getErrorCode()
+		EcProto getErrorCode()
 		{
-			return mHandle.promise().mEc;
+			return { mHandle };
 		}
 
 		void getException()
 		{
-			std::rethrow_exception(mHandle.promise().mExPtr);
+			std::rethrow_exception(mHandle.get().promise().mExPtr);
 		}
 
 		bool done()
 		{
-			return getErrorCode() || mHandle.done();
+			return getErrorCode() || mHandle.get().done();
 		}
 		void resume()
 		{
-			mHandle.resume();
+			mHandle.get().resume();
 		}
 	};
 
@@ -350,7 +437,7 @@ namespace coproto
 		using coro_handle = std::coroutine_handle<ProtoPromise>;
 		coro_handle mParentHandle;
 
-		ProtoAwaiter(coro_handle parent, Proto&& proto)
+		ProtoAwaiter(coro_handle parent, SharedHandle<coro_handle>&& proto)
 			: mProto(std::move(proto))
 			, mParentHandle(parent)
 		{
@@ -371,7 +458,24 @@ namespace coproto
 
 		void await_suspend(coro_handle h) { }
 		void await_resume() {
-			assert(!mProto.mHandle.promise().mEc);
+			assert(!mProto.mHandle.get().promise().mEc);
+		}
+	};
+
+	struct EcProtoAwaiter : public ProtoAwaiter
+	{
+
+		EcProtoAwaiter(coro_handle parent, EcProto&& proto)
+			: ProtoAwaiter(parent,std::move(proto.mHandle))
+		{
+			mReturnErrors = true;
+		}
+
+		EcProtoAwaiter(const ProtoAwaiter&) = delete;
+		EcProtoAwaiter(ProtoAwaiter&&) = delete;
+
+		error_code await_resume() {
+			return mProto.mHandle.get().promise().mEc;
 		}
 	};
 
@@ -419,6 +523,7 @@ namespace coproto
 
 		void nestedProtocolTest();
 		void nestedProtocolThrowTest();
+		void nestedProtocolErrorCodeTest();
 
 		void zeroSendRecvTest();
 		void badRecvSizeTest();
