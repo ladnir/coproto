@@ -153,6 +153,8 @@
     <ClInclude Include="coproto.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="error_code.h" />
+    <ClInclude Include="Scheduler.h" />
+    <ClInclude Include="Proto.h" />
     <ClInclude Include="Tests.h" />
     <ClInclude Include="TypeTraits.h" />
   </ItemGroup>
@@ -160,6 +162,7 @@
     <ClCompile Include="Buffers.cpp" />
     <ClCompile Include="coproto.cpp" />
     <ClCompile Include="error_code.cpp" />
+    <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="TypeTraits.cpp" />
   </ItemGroup>

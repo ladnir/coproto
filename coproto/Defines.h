@@ -1,4 +1,5 @@
 #pragma once
+#define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include <cstdint>
 #include <cryptoTools/gsl/span>
