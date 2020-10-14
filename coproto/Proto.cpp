@@ -15,7 +15,7 @@ namespace coproto
 	{
 	public:
 		Container mContainer;
-		error_code mEc = code::ioError;
+		error_code mEc = code::noMessageAvailable;
 
 		RecvBuff()
 		{}
@@ -30,26 +30,36 @@ namespace coproto
 			return internal::tryResize(size, mContainer);
 		}
 
-		error_code resume() override { 
+		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->recv(*this);
 			return mEc;
 		}
 
 		bool done() override {
-			return !mEc;
+			return mEc != code::noMessageAvailable;
 		}
 
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			assert(0 && "not supported (RefSendBuff)");
+		}
+		std::exception_ptr getExpPtr() override {
+			return nullptr;
+		}
+
+		error_code getErrorCode() override {
+			return mEc;
+		}
 		void* getValue() override { return &mContainer; };
 	};
 
 
-	template<typename Container>
-	class RefRecvBuff: public Buffer, public ProtoBase
+	template<typename Container, bool allowResize = true>
+	class RefRecvBuff : public Buffer, public ProtoBase
 	{
 	public:
 		Container& mContainer;
-		error_code mEc = code::ioError;
+		error_code mEc = code::noMessageAvailable;
 
 		RefRecvBuff(Container& t)
 			:mContainer(t)
@@ -62,17 +72,31 @@ namespace coproto
 
 		error_code tryResize(u64 size) override
 		{
-			return internal::tryResize(size, mContainer);
+			if constexpr (allowResize)
+				return internal::tryResize(size, mContainer);
+			else
+				return code::noResizeSupport;
 		}
 
-		error_code resume() override { 
+		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->recv(*this);
 			return mEc;
 		}
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			assert(0 && "not supported (RefSendBuff)");
+		}
+		std::exception_ptr getExpPtr() override {
+			return nullptr;
+		}
+
+
+		error_code getErrorCode() override {
+			return mEc;
+		}
 
 		bool done() override {
-			return !mEc;
+			return mEc != code::noMessageAvailable;
 		}
 
 	};
@@ -82,7 +106,7 @@ namespace coproto
 	{
 	public:
 		Container& mContainer;
-		error_code mEc = code::ioError;
+		error_code mEc = code::noMessageAvailable;
 
 		RefSendBuff(Container& t)
 			:mContainer(t)
@@ -105,10 +129,66 @@ namespace coproto
 			return mEc;
 		}
 
+
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			assert(0 && "not supported (RefSendBuff)");
+		}
+		std::exception_ptr getExpPtr() override {
+			return nullptr;
+		}
+
+		error_code getErrorCode() override {
+			return mEc;
+		}
+
 		bool done() override {
-			return !mEc;
+			return mEc != code::noMessageAvailable;
 		}
 	};
+
+
+	template<typename Container>
+	class MvSendBuff : public Buffer, public ProtoBase
+	{
+	public:
+		Container mContainer;
+		error_code mEc = code::noMessageAvailable;
+
+		MvSendBuff(Container&& t)
+			:mContainer(std::move(t))
+		{}
+
+		span<u8> asSpan() override
+		{
+			return internal::asSpan(mContainer);
+		}
+
+		error_code tryResize(u64 size) override
+		{
+			return internal::tryResize(size, mContainer);
+		}
+
+		error_code resume() override {
+			assert(mSched);
+			mEc = mSched->send(*this);
+			return mEc;
+		}
+
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			assert(0 && "not supported (RefSendBuff)");
+		}
+		std::exception_ptr getExpPtr() override {
+			return nullptr;
+		}
+
+		error_code getErrorCode() override {
+			return mEc;
+		}
+		bool done() override {
+			return mEc != code::noMessageAvailable;
+		}
+	};
+
 
 	template<typename Container>
 	Proto<void> send(Container& t)
@@ -117,6 +197,15 @@ namespace coproto
 		proto.mBase.emplace<RefSendBuff<Container>>(t);
 		return proto;
 	}
+
+	template<typename Container>
+	Proto<void> send(Container&& t)
+	{
+		Proto<void> proto;
+		proto.mBase.emplace<MvSendBuff<Container>>(std::forward<Container>(t));
+		return proto;
+	}
+
 
 	template<typename Container>
 	Proto<void> recv(Container& t)
@@ -128,45 +217,73 @@ namespace coproto
 
 
 	template<typename Container>
+	Proto<void> recvFixedSize(Container& t)
+	{
+		Proto<void> proto;
+		proto.mBase.emplace<RefRecvBuff<Container, false>>(t);
+		return proto;
+	}
+
+
+	template<typename Container>
 	Proto<Container> recv()
 	{
 		Proto<Container> proto;
-		//RecvBuff<Container> r;
 		proto.mBase.emplace<RecvBuff<Container>>();
 		return proto;
+	}
+
+	template<typename value_type>
+	Proto<std::vector<value_type>> recvVec()
+	{
+		return recv<std::vector<value_type>>();
 	}
 
 
 	void coproto::LocalScheduler::Sched::runOne()
 	{
-		auto ec = mStack.back()->resume();
-
-
-		if (!ec || ec != code::noMessageAvailable)
+		while (mStack.size())
 		{
-			//if (mStack.size() > 1 &&
-			//	ec)
-			//{
-			//	auto& child = mStack.back().mProto->mHandle.get().promise();
-			//	auto& awaiter = *mStack.back().mAwaiter;
+			auto& frame = *mStack.back();
+			auto ec = frame.resume();
 
-			//	if (awaiter.mReturnErrors == false)
-			//	{
-			//		auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
-			//		parent.mExPtr = std::move(child.mExPtr);
-			//		parent.setError(child.mEc);
-			//	}
-			//}
+			if (ec == code::noMessageAvailable)
+				return;
+
+			if (ec && mStack.size() > 1)
+			{
+				//auto& child = frame.mProto->mHandle.get().promise();
+				auto& parent = *mStack[mStack.size() - 2];
+
+				parent.setError(ec, std::move(frame.getExpPtr()));
+
+				//if (awaiter.mReturnErrors == false)
+				//{
+				//	auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
+				//	parent.mExPtr = std::move(child.mExPtr);
+				//	parent.setError(child.mEc);
+				//}
+			}
+
 			mStack.pop_back();
 
+			//if (!ec || ec != code::noMessageAvailable)
+			//{
+			//	if (mStack.size() > 1 &&
+			//		ec)
+			//	{
 
-			if (mStack.size())
-			{
-				runOne();
-			}
+			//	}
+
+
+			//	if (mStack.size())
+			//	{
+			//		runOne();
+			//	}
+			//}
+
+
 		}
-
-
 	}
 
 	bool coproto::LocalScheduler::Sched::done()
@@ -200,7 +317,7 @@ namespace coproto
 
 		return ec;
 	}
-	
+
 	error_code LocalScheduler::Sched::send(Buffer& buff)
 	{
 
@@ -212,18 +329,21 @@ namespace coproto
 		return {};
 	}
 
-	void LocalScheduler::Sched::addProto(ProtoBase& proto) 
+	void LocalScheduler::Sched::addProto(ProtoBase& proto)
 	{
 		mStack.push_back(&proto);
 
 		assert(proto.mSched == nullptr || proto.mSched == this);
 		proto.mSched = this;
-		//proto.mProto.mHandle.get().promise().mSched = this;
-
-		//runOne();
 	}
 
-	error_code LocalScheduler::execute(Proto<void>& p0, Proto<void>& p1) 
+	void LocalScheduler::Sched::removeProto(ProtoBase& proto)
+	{
+		assert(&proto == mStack.back());
+		mStack.pop_back();
+	}
+
+	error_code LocalScheduler::execute(Proto<void>& p0, Proto<void>& p1)
 	{
 		mScheds[0].mIdx = 0;
 		mScheds[0].mSched = this;
@@ -249,6 +369,13 @@ namespace coproto
 
 		}
 
+		auto e0 = p0.mBase->getErrorCode();
+		if (e0)
+			return e0;
+		auto e1 = p1.mBase->getErrorCode();
+		if (e1)
+			return e1;
+		//if()
 		return {};
 	}
 
@@ -267,7 +394,7 @@ namespace coproto
 			auto proto = [](bool party) -> Proto<> {
 				std::string str("hello from 0");
 
-				for (u64 i = 0; i < 1; ++i)
+				for (u64 i = 0; i < 5; ++i)
 				{
 					if (party)
 					{
@@ -302,5 +429,350 @@ namespace coproto
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
+
+
+		void resultSendRecvTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+				std::string str("hello from 0");
+
+				for (u64 i = 0; i < 5; ++i)
+				{
+					if (party)
+					{
+						auto ec = co_await send(str).wrap();
+						//std::cout << " p1 sent" << std::endl;
+						Result<std::string> r = co_await recv<std::string>().wrap();
+
+						str = r.unwrap();
+						//std::cout << " p1 recv" << std::endl;
+
+						if (str != "hello from " + std::to_string(i * 2 + 1))
+							throw std::runtime_error(LOCATION);
+						str.back() += 1;
+					}
+					else
+					{
+						co_await recv(str);
+						//std::cout << " p0 recv" << std::endl;
+
+						if (str != "hello from " + std::to_string(i * 2 + 0))
+							throw std::runtime_error(LOCATION);
+
+						str.back() += 1;
+						co_await send(str);
+						//std::cout << " p0 sent" << std::endl;
+
+					}
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
+
+
+
+
+		void typedRecvTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+
+				std::vector<u64> buff, rBuff;
+				for (oc::u64 i = 0; i < 5; ++i)
+				{
+					if (party)
+					{
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+						co_await send(std::move(buff));
+						rBuff = co_await recv<std::vector<u64>>();
+
+						buff.resize(2 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+					}
+					else
+					{
+						rBuff = co_await recvVec<u64>();
+
+						buff.resize(1 + i * 2);
+						std::fill(buff.begin(), buff.end(), i * 2);
+
+						if (buff != rBuff)
+							throw std::runtime_error(LOCATION);
+
+						buff.resize(buff.size() + 1);
+						std::fill(buff.begin(), buff.end(), i * 2 + 1);
+						co_await send(std::move(buff));
+					}
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
+
+
+
+		void zeroSendRecvTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+
+				std::vector<u64> buff;
+				co_await send(buff);
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (!ec)
+				throw std::runtime_error("");
+		}
+
+
+		void badRecvSizeTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+
+				std::vector<u64> buff(3);
+
+				if (party)
+				{
+					co_await send(buff);
+				}
+				else
+				{
+					buff.resize(1);
+					co_await recvFixedSize(buff);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec != code::noResizeSupport)
+				throw std::runtime_error(ec.message());
+		}
+
+
+		void zeroSendErrorCodeTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+
+				std::vector<u64> buff;
+				auto ec = co_await send(buff).wrap();
+
+				if (ec != code::sendLengthZeroMsg)
+					throw std::runtime_error("");
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error("");
+		}
+
+
+		void badRecvSizeErrorCodeTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+
+				std::vector<u64> buff(3);
+
+				if (party)
+				{
+					co_await send(buff);
+				}
+				else
+				{
+					buff.resize(1);
+					auto ec = co_await recvFixedSize(buff).wrap();
+
+					if (ec != code::noResizeSupport)
+						throw std::runtime_error("");
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error("");
+		}
+
+		void throwsTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+				throw std::runtime_error("");
+
+				co_return;
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (!ec)
+				throw std::runtime_error("");
+		}
+
+
+		Proto<> echoServer(u64 i)
+		{
+			//std::cout << "p1 echo recv " << i << std::endl;
+			auto msg = co_await recv<std::string>();
+			//std::cout << "p1 echo send " << i << std::endl;
+			co_await send(msg);
+
+			if (i)
+			{
+				echoServer(i - 1);
+			}
+		}
+		Proto<> echoClient(u64 i)
+		{
+			auto msg = std::string("hello world");
+			//std::cout << "p0 echo send " << i << std::endl;
+			co_await send(msg);
+			//std::cout << "p0 echo recv " << i << std::endl;
+			if (msg != co_await recv<std::string>())
+			{
+				throw std::runtime_error("hello world");
+			}
+
+			if (i)
+			{
+				echoClient(i - 1);
+			}
+		}
+
+
+		void nestedSendRecvTest()
+		{
+			auto proto = [](bool party) -> Proto<> {
+				std::string str("hello from 0");
+				u64 n = 5;
+				if (party)
+				{
+					//std::cout << "p1 send " << std::endl;
+					auto ec = co_await send(std::move(str)).wrap();
+					if (ec)
+						throw std::runtime_error(LOCATION);
+
+					co_await echoServer(n);
+				}
+				else
+				{
+					//std::cout << "p0 recv " << std::endl;
+					co_await recv(str);
+					//std::cout << " p0 recv" << std::endl;
+
+					if (str != "hello from 0")
+						throw std::runtime_error(LOCATION);
+
+					co_await echoClient(n);
+					//std::cout << " p0 sent" << std::endl;
+
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
+
+
+		Proto<> throwServer(u64 i)
+		{
+			auto msg = co_await recv<std::string>();
+			co_await send((msg));
+
+			if (i)
+				co_await throwServer(i - 1);
+			else
+				throw std::runtime_error("");
+		}
+		Proto<> throwClient(u64 i)
+		{
+			auto msg = std::string("hello world");
+			co_await send(msg);
+			if (msg != co_await recv<std::string>())
+			{
+				throw std::runtime_error("hello world");
+			}
+
+			if (i)
+				co_await throwClient(i - 1);
+		}
+
+		void nestedProtocolThrowTest()
+		{
+
+			auto proto = [](bool party) -> Proto<> {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+					co_await throwServer(4);
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await recv(buff);
+					co_await throwClient(4);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (!ec)
+				throw std::runtime_error("");
+		}
+
+
+		void nestedProtocolErrorCodeTest()
+		{
+			bool hasEc = false;
+			u64 n = 0;
+			auto proto = [&hasEc, n](bool party) -> Proto<> {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+					auto ec = co_await throwServer(n).wrap();
+					if (ec)
+					{
+						hasEc = true;
+					}
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await recv(buff);
+					co_await throwClient(n);
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec || !hasEc)
+				throw std::runtime_error("");
+		}
+
 	}
 }

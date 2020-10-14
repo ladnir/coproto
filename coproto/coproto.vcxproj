@@ -153,6 +153,7 @@
     <ClInclude Include="coproto.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="error_code.h" />
+    <ClInclude Include="Result.h" />
     <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Proto.h" />
     <ClInclude Include="Tests.h" />

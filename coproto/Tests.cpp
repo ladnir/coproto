@@ -11,8 +11,22 @@ namespace coproto
 
 	oc::TestCollection testCollection([](oc::TestCollection& t) {
 		
-		t.add("SmallBufferTest             ", tests::SmallBufferTest);
-		t.add("strSendRecvTest             ", tests::strSendRecvTest);
+		t.add("SmallBufferTest                 ", tests::SmallBufferTest);
+		t.add("strSendRecvTest                 ", tests::strSendRecvTest); 
+		t.add("resultSendRecvTest              ", tests::resultSendRecvTest);
+		t.add("typedRecvTest                   ", tests::typedRecvTest);
+		
+		t.add("zeroSendRecvTest                ", tests::zeroSendRecvTest);
+		t.add("badRecvSizeTest                 ", tests::badRecvSizeTest);
+		t.add("zeroSendErrorCodeTest           ", tests::zeroSendErrorCodeTest);
+		t.add("badRecvSizeErrorCodeTest        ", tests::badRecvSizeErrorCodeTest);
+		t.add("throwsTest                      ", tests::throwsTest);
+
+		t.add("nestedSendRecvTest              ", tests::nestedSendRecvTest);
+		t.add("nestedProtocolThrowTest         ", tests::nestedProtocolThrowTest);
+		t.add("nestedProtocolErrorCodeTest     ", tests::nestedProtocolErrorCodeTest);
+
+		
 		t.add("v1::intSendRecvTest             ", v1::tests::intSendRecvTest);
 		t.add("v1::arraySendRecvTest           ", v1::tests::arraySendRecvTest);
 		t.add("v1::basicSendRecvTest           ", v1::tests::strSendRecvTest);

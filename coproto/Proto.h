@@ -8,6 +8,7 @@
 #include <list>
 #include <optional>
 #include <iostream>
+#include "Result.h"
 
 namespace coproto
 {
@@ -35,29 +36,36 @@ namespace coproto
 
 		Scheduler* mSched = nullptr;
 
-		//using void_handle = std::coroutine_handle<void>;
-
 		virtual error_code resume() = 0;
 		virtual bool done() = 0;
 
 		virtual void* getValue() { return nullptr; };
-		//virtual void await_suspend(void_handle h) = 0;
-		//virtual T await_resume() = 0;
-
-		//void setSched(Scheduler& s) { 
-		//	mSched = &s; 
-		//	s.addProto(*this);
-		//};
+		virtual void setError(error_code& e, std::exception_ptr&& p) = 0;
+		virtual std::exception_ptr getExpPtr() = 0;
+		virtual error_code getErrorCode() = 0;
 
 		Scheduler& getSched()
 		{
 			assert(mSched);
 			return *mSched;
 		};
-
 	};
 
 
+
+	template<typename T>
+	struct Optional;
+
+	template<>
+	struct Optional<void>
+	{};
+
+	template<typename T>
+	struct Optional : public std::optional<T>
+	{};
+
+
+	// TODO("merge this with ProtoPromise");
 	template<typename T>
 	class ProtoPromiseBase : public ProtoBase
 	{
@@ -71,7 +79,7 @@ namespace coproto
 
 		ProtoPromiseBase() = delete;
 		ProtoPromiseBase(const ProtoPromiseBase&) = delete;
-		ProtoPromiseBase(ProtoPromiseBase&&o)
+		ProtoPromiseBase(ProtoPromiseBase&& o)
 			: ProtoBase(o.mSched),
 			mHandle(o.mHandle)
 		{
@@ -87,21 +95,51 @@ namespace coproto
 
 
 		error_code resume() override {
-			
-			assert(!done());
+
+			assert(!mHandle.done());
 			assert(mSched);
 			auto& prom = mHandle.promise();
 
 			prom.mSched = mSched;
-			assert(!prom.mEc || prom.mEc == code::noMessageAvailable);
-			prom.mEc = {};
-			mHandle.resume();
-			return mHandle.promise().mEc;
+			//assert(!prom.mEc || );
+			if (prom.mEc == code::noMessageAvailable)
+				prom.mEc = {};
 
+			if(!prom.mEc)
+				mHandle.resume();
+
+			return prom.mEc;
 		};
+
+		Optional<T> mVal;
+		void* getValue()
+		{
+			if constexpr (std::is_void_v<T>)
+				return nullptr;
+			else
+			{
+				return &mVal.value();
+			}
+		}
 
 		bool done() override {
 			return hasError() || mHandle.done();
+		}
+
+
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			auto& prom = mHandle.promise();
+			assert(!prom.mEc || prom.mEc == code::noMessageAvailable);
+			prom.mEc = ec;
+			prom.mExPtr = std::move(p);
+		}
+		std::exception_ptr getExpPtr() override {
+			auto& prom = mHandle.promise();
+			return prom.mExPtr;
+		}
+		error_code getErrorCode() override {
+			auto& prom = mHandle.promise();
+			return prom.mEc;
 		}
 
 		bool hasError()
@@ -111,25 +149,109 @@ namespace coproto
 		}
 	};
 
-	template<typename T>
-	struct ValueStorage;
 
-	template<>
-	struct ValueStorage<void>
+	namespace internal
 	{
-		void value() {}
-	};
-
-	template<typename T> 
-	struct ValueStorage
-	{
-		std::optional<T> mVal = std::nullopt;;
-		T value()
+		template<typename T>
+		struct ResultWrapperHelper;
+		template<>
+		struct ResultWrapperHelper<void>
 		{
-			assert(mVal.has_value());
-			return std::move(mVal.value());
+			using type = error_code;
+		};
+		template<typename T>
+		struct ResultWrapperHelper
+		{
+			using type = Result<T, error_code>;
+		};
+	}
+
+	template<typename T>
+	class ResultWrapper : public ProtoBase
+	{
+	public:
+
+		using value_type = typename internal::ResultWrapperHelper<T>::type;
+		using type = Proto<value_type>;
+
+		internal::Inline<ProtoBase> mBase;
+
+		value_type mRes = Err(make_error_code(code::success));
+		std::exception_ptr mExPtr = nullptr;
+		
+		ResultWrapper() = delete;
+		ResultWrapper(const ResultWrapper&) = delete;
+
+		ResultWrapper(internal::Inline<ProtoBase>&& o)
+			: mBase(std::move(o))
+		{}
+
+		ResultWrapper(ResultWrapper&& o)
+			: ProtoBase(o.mSched),
+			mBase(std::move(o.mBase))
+		{
+			o.mSched = nullptr;
+		}
+
+		error_code resume() override {
+			mBase->mSched = mSched;
+			auto ec = mBase->resume();
+
+			if constexpr (std::is_same_v<error_code, value_type>)
+				mRes = ec;
+			else
+				mRes = Err(ec);
+
+			if (ec == code::noMessageAvailable)
+				return ec;
+			return {};
+		};
+
+		void* getValue() override
+		{
+			if constexpr (!std::is_same_v<error_code, value_type>)
+			{
+				error_code ec = mRes.error();
+				if (!ec)
+				{
+					auto v = (T*)mBase.get()->getValue();
+					assert(v);
+
+					T& vv = *v;
+					mRes = Ok(std::move(vv));
+				}
+			}
+
+			return &mRes;
+		}
+
+		bool done() override {
+			return mBase.get()->done();
+		}
+
+		void setError(error_code& ec, std::exception_ptr&& p) override {
+			mRes = Err(std::move(ec));
+			mExPtr = std::move(p);
+		}
+		std::exception_ptr getExpPtr() override {
+			return mExPtr;
+		}
+
+		error_code getErrorCode() override {
+			if constexpr (!std::is_same_v<error_code, value_type>)
+			{
+				if(mRes.hasError())
+					return mRes.error();
+				return {};
+			}
+			else
+			{
+				return mRes;
+			}
 		}
 	};
+
+
 
 	template<typename T>
 	class ProtoPromise
@@ -152,7 +274,7 @@ namespace coproto
 			//std::cout << " ~ProtoPromise " << hexPtr(this) << std::endl;
 		}
 
-		ValueStorage<T> mRet;
+		//ValueStorage<T> mRet;
 
 		bool done()
 		{
@@ -177,6 +299,22 @@ namespace coproto
 		ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
 	};
 
+
+	//template<typename T>
+	//struct WrapResult;
+	//template<>
+	//struct WrapResult<void>
+	//{
+	//	using type = Proto<error_code>;
+	//};
+
+
+	//template<typename T>
+	//struct WrapResult
+	//{
+	//	using type = Proto<Result<T, error_code>>;
+	//};
+
 	template<typename T = void>
 	class Proto
 	{
@@ -186,6 +324,16 @@ namespace coproto
 		internal::Inline<ProtoBase> mBase;
 
 		using value_type = T;
+
+
+
+		typename ResultWrapper<T>::type wrap()
+		{
+			typename ResultWrapper<T>::type r;
+			r.mBase.emplace<ResultWrapper<T>>(std::move(mBase));
+			return r;
+		}
+
 	};
 
 
@@ -203,22 +351,31 @@ namespace coproto
 		{
 		}
 
-		bool await_ready() 
+		bool await_ready()
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
 			proto.mSched = prom.mSched;
 
-			prom.mEc = proto.resume();
+			prom.mSched->addProto(proto);
 
-			if(!proto.done())
-				prom.mSched->addProto(proto);
+			auto ec = proto.resume();
 
-			return !prom.mEc;
+			if (proto.done())
+			{
+				prom.mSched->removeProto(proto);
+
+				if (ec)
+					prom.mEc = ec;
+			}
+			else if(ec == code::noMessageAvailable)
+				prom.mEc = ec;
+
+			return !ec;
 
 		}
 		void await_suspend(coro_handle h)
-		{ 
+		{
 			///*mTask.mBase.get()->await_suspend(h)*/; 
 		}
 
@@ -227,6 +384,7 @@ namespace coproto
 			if constexpr (!std::is_same<void, T>::value)
 			{
 				auto& proto = *static_cast<ProtoPromiseBase<T>*>(mTask.mBase.get());
+				assert(proto.done());
 				auto ptr = (T*)proto.getValue();
 				assert(ptr);
 				//auto& prom = proto.mHandle.promise();
@@ -252,6 +410,7 @@ namespace coproto
 			error_code recv(Buffer& data) override;
 			error_code send(Buffer& data) override;
 			void addProto(ProtoBase& proto) override;
+			void removeProto(ProtoBase& proto) override;
 
 			//void addProto(ProtoAwaiter<void>& awaiter) override;
 
@@ -271,6 +430,20 @@ namespace coproto
 	namespace tests
 	{
 		void strSendRecvTest();
+		void resultSendRecvTest();
+		void typedRecvTest();
+
+		void zeroSendRecvTest();
+		void badRecvSizeTest();
+
+		void zeroSendErrorCodeTest();
+		void badRecvSizeErrorCodeTest();
+
+		void throwsTest();
+
+		void nestedSendRecvTest();
+		void nestedProtocolThrowTest();
+		void nestedProtocolErrorCodeTest();
 	}
 
 	template<typename T>

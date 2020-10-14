@@ -14,6 +14,7 @@ namespace coproto
 		virtual error_code send(Buffer& data) = 0;
 
 		virtual void addProto(ProtoBase& proto) = 0;
+		virtual void removeProto(ProtoBase& proto) = 0;
 	};
 
 
