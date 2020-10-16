@@ -13,8 +13,9 @@ namespace coproto
 		virtual error_code recv(Buffer& data) = 0;
 		virtual error_code send(Buffer& data) = 0;
 
-		virtual void addProto(ProtoBase& proto) = 0;
-		virtual void removeProto(ProtoBase& proto) = 0;
+		virtual void scheduleNext(ProtoBase& proto) = 0; 
+		virtual void scheduleReady(ProtoBase& proto) = 0;
+			//virtual void removeProto(ProtoBase& proto) = 0;
 	};
 
 

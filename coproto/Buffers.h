@@ -92,9 +92,15 @@ namespace coproto
                 }
                 else
                 {
+                    isOwning() = m.isOwning();
                     std::swap(mData, m.mData);
                 }
                 return *this;
+            }
+
+            bool& isOwning()
+            {
+                return *(bool*)&getController();
             }
 
             template<typename U, typename... Args >
@@ -127,8 +133,15 @@ namespace coproto
                 // this object is too big, use the allocator. Local storage
                 // will be unused as denoted by (isSBO() == false).
                 mData = new U(std::forward<Args>(args)...);
+                isOwning() = true;
             }
 
+
+            void setBorrowed(Interface* ptr)
+            {
+                mData = ptr;
+                isOwning() = false;
+            }
 
             bool isStoredInline() const
             {
@@ -152,7 +165,7 @@ namespace coproto
                 if (isStoredInline())
                     // manually call the virtual destructor.
                     getController().~Controller();
-                else if (get())
+                else if (get() && isOwning())
                     // let the compiler call the destructor
                     delete get();
 

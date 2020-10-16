@@ -35,20 +35,47 @@ namespace coproto
 		{}
 
 		Scheduler* mSched = nullptr;
+		std::vector<ProtoBase*> mDownstream;
+		std::vector<ProtoBase*> mUptream;
+
+		void finalize(error_code ec, std::exception_ptr p)
+		{
+			assert(mUptream.size() == 0);
+			if (ec)
+			{
+				for (auto d : mDownstream)
+				{
+					d->setError(ec, p);
+				}
+			}
+
+			for (auto d : mDownstream)
+			{
+				auto iter = std::find(d->mUptream.begin(), d->mUptream.end(), this);
+				assert(iter != d->mUptream.end());
+				std::swap(*iter, d->mUptream.back());
+				d->mUptream.pop_back();
+
+				if (d->mUptream.size() == 0)
+				{
+					mSched->scheduleReady(*d);
+				}
+			}
+		}
 
 		virtual error_code resume() = 0;
 		virtual bool done() = 0;
 
 		virtual void* getValue() { return nullptr; };
-		virtual void setError(error_code& e, std::exception_ptr&& p) = 0;
+		virtual void setError(error_code e, std::exception_ptr p) = 0;
 		virtual std::exception_ptr getExpPtr() = 0;
 		virtual error_code getErrorCode() = 0;
 
-		Scheduler& getSched()
-		{
-			assert(mSched);
-			return *mSched;
-		};
+		//Scheduler& getSched()
+		//{
+		//	assert(mSched);
+		//	return *mSched;
+		//};
 	};
 
 
@@ -65,89 +92,92 @@ namespace coproto
 	{};
 
 
-	// TODO("merge this with ProtoPromise");
-	template<typename T>
-	class ProtoPromiseBase : public ProtoBase
-	{
-	public:
-		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
-		coro_handle mHandle;
+	//// TODO("merge this with ProtoPromise");
+	//template<typename T>
+	//class ProtoPromiseBase : public ProtoBase
+	//{
+	//public:
+	//	using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
+	//	coro_handle mHandle;
 
-		ProtoPromiseBase(coro_handle t)
-			:mHandle(t)
-		{}
+	//	ProtoPromiseBase(coro_handle t)
+	//		:mHandle(t)
+	//	{}
 
-		ProtoPromiseBase() = delete;
-		ProtoPromiseBase(const ProtoPromiseBase&) = delete;
-		ProtoPromiseBase(ProtoPromiseBase&& o)
-			: ProtoBase(o.mSched),
-			mHandle(o.mHandle)
-		{
-			o.mSched = nullptr;
-			o.mHandle = nullptr;
-		}
+	//	ProtoPromiseBase() = delete;
+	//	ProtoPromiseBase(const ProtoPromiseBase&) = delete;
+	//	ProtoPromiseBase(ProtoPromiseBase&& o)
+	//		: ProtoBase(o.mSched),
+	//		mHandle(o.mHandle)
+	//	{
+	//		o.mSched = nullptr;
+	//		o.mHandle = nullptr;
+	//	}
 
-		~ProtoPromiseBase()
-		{
-			if (mHandle)
-				mHandle.destroy();
-		}
-
-
-		error_code resume() override {
-
-			assert(!mHandle.done());
-			assert(mSched);
-			auto& prom = mHandle.promise();
-
-			prom.mSched = mSched;
-			//assert(!prom.mEc || );
-			if (prom.mEc == code::noMessageAvailable)
-				prom.mEc = {};
-
-			if(!prom.mEc)
-				mHandle.resume();
-
-			return prom.mEc;
-		};
-
-		Optional<T> mVal;
-		void* getValue()
-		{
-			if constexpr (std::is_void_v<T>)
-				return nullptr;
-			else
-			{
-				return &mVal.value();
-			}
-		}
-
-		bool done() override {
-			return hasError() || mHandle.done();
-		}
+	//	~ProtoPromiseBase()
+	//	{
+	//		if (mHandle)
+	//			mHandle.destroy();
+	//	}
 
 
-		void setError(error_code& ec, std::exception_ptr&& p) override {
-			auto& prom = mHandle.promise();
-			assert(!prom.mEc || prom.mEc == code::noMessageAvailable);
-			prom.mEc = ec;
-			prom.mExPtr = std::move(p);
-		}
-		std::exception_ptr getExpPtr() override {
-			auto& prom = mHandle.promise();
-			return prom.mExPtr;
-		}
-		error_code getErrorCode() override {
-			auto& prom = mHandle.promise();
-			return prom.mEc;
-		}
+	//	error_code resume() override {
 
-		bool hasError()
-		{
-			return mHandle.promise().mEc &&
-				mHandle.promise().mEc != code::noMessageAvailable;
-		}
-	};
+	//		assert(!mHandle.done());
+	//		assert(mSched);
+	//		auto& prom = mHandle.promise();
+
+	//		prom.mSched = mSched;
+
+	//		if (prom.mEc == code::suspend)
+	//			prom.mEc = {};
+
+	//		if(!prom.mEc)
+	//			mHandle.resume();
+
+	//		if (done())
+	//			finalize();
+
+	//		return prom.mEc;
+	//	};
+
+	//	Optional<T> mVal;
+	//	void* getValue()
+	//	{
+	//		if constexpr (std::is_void_v<T>)
+	//			return nullptr;
+	//		else
+	//		{
+	//			return &mVal.value();
+	//		}
+	//	}
+
+	//	bool done() override {
+	//		return hasError() || mHandle.done();
+	//	}
+
+
+	//	void setError(error_code& ec, std::exception_ptr&& p) override {
+	//		auto& prom = mHandle.promise();
+	//		assert(!prom.mEc || prom.mEc == code::suspend);
+	//		prom.mEc = ec;
+	//		prom.mExPtr = std::move(p);
+	//	}
+	//	std::exception_ptr getExpPtr() override {
+	//		auto& prom = mHandle.promise();
+	//		return prom.mExPtr;
+	//	}
+	//	error_code getErrorCode() override {
+	//		auto& prom = mHandle.promise();
+	//		return prom.mEc;
+	//	}
+
+	//	bool hasError()
+	//	{
+	//		return mHandle.promise().mEc &&
+	//			mHandle.promise().mEc != code::suspend;
+	//	}
+	//};
 
 
 	namespace internal
@@ -178,7 +208,7 @@ namespace coproto
 
 		value_type mRes = Err(make_error_code(code::success));
 		std::exception_ptr mExPtr = nullptr;
-		
+
 		ResultWrapper() = delete;
 		ResultWrapper(const ResultWrapper&) = delete;
 
@@ -195,25 +225,33 @@ namespace coproto
 
 		error_code resume() override {
 			mBase->mSched = mSched;
-			auto ec = mBase->resume();
 
-			if constexpr (std::is_same_v<error_code, value_type>)
-				mRes = ec;
-			else
-				mRes = Err(ec);
 
-			if (ec == code::noMessageAvailable)
+			error_code ec;
+			if (!done())
+			{
+				ec = mBase->resume();
+				if (ec && ec != code::suspend)
+					setError(ec, mBase->getExpPtr());
+			}
+
+			if (ec == code::suspend)
+			{
+				mUptream.push_back(mBase.get());
+				mBase->mDownstream.push_back(this);
 				return ec;
+			}
+
+			assert(done());
+			finalize({}, nullptr);
 			return {};
 		};
 
 		void* getValue() override
 		{
-			if constexpr (!std::is_same_v<error_code, value_type>)
-			{
-				error_code ec = mRes.error();
-				if (!ec)
-				{
+
+			if constexpr (!std::is_same_v<error_code, value_type>) {
+				if (!mRes.error()) {
 					auto v = (T*)mBase.get()->getValue();
 					assert(v);
 
@@ -229,7 +267,8 @@ namespace coproto
 			return mBase.get()->done();
 		}
 
-		void setError(error_code& ec, std::exception_ptr&& p) override {
+		void setError(error_code ec, std::exception_ptr p) override {
+			assert(ec);
 			mRes = Err(std::move(ec));
 			mExPtr = std::move(p);
 		}
@@ -240,7 +279,7 @@ namespace coproto
 		error_code getErrorCode() override {
 			if constexpr (!std::is_same_v<error_code, value_type>)
 			{
-				if(mRes.hasError())
+				if (mRes.hasError())
 					return mRes.error();
 				return {};
 			}
@@ -254,37 +293,26 @@ namespace coproto
 
 
 	template<typename T>
-	class ProtoPromise
+	class ProtoPromise : public ProtoBase
 	{
 	public:
 		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
 		std::exception_ptr mExPtr;
 		error_code mEc;
-		Scheduler* mSched = nullptr;
+		Optional<T> mVal;
 
+		ProtoPromise() { }
+		~ProtoPromise() { }
 
-		ProtoPromise()
+		coro_handle getHandle()
 		{
-			//std::cout << " ProtoPromise " << hexPtr(this) << std::endl;
-		}
-
-
-		~ProtoPromise()
-		{
-			//std::cout << " ~ProtoPromise " << hexPtr(this) << std::endl;
-		}
-
-		//ValueStorage<T> mRet;
-
-		bool done()
-		{
-			return mEc || coro_handle::from_promise(*this).done();
+			return coro_handle::from_promise(*this);
 		}
 
 		Proto<T> get_return_object()
 		{
 			Proto<T> r;
-			r.mBase.emplace<ProtoPromiseBase<T>>(coro_handle::from_promise(*this));
+			r.mBase.setBorrowed(this);
 			return r;
 		}
 		std::suspend_always initial_suspend() { return {}; }
@@ -297,6 +325,66 @@ namespace coproto
 
 		template<typename U>
 		ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
+
+
+
+
+
+
+
+
+
+
+
+
+		error_code resume() override {
+
+
+			if (!done())
+			{
+				mEc = {};
+				getHandle().resume();
+			}
+
+			if (done())
+				finalize(mEc, mExPtr);
+
+			return mEc;
+		};
+
+		void* getValue()
+		{
+			if constexpr (std::is_void_v<T>)
+				return nullptr;
+			else
+			{
+				return &mVal.value();
+			}
+		}
+
+		bool done() override {
+
+			return hasError() || getHandle().done();
+		}
+
+
+		void setError(error_code ec, std::exception_ptr p) override {
+			assert(!hasError());
+			mEc = ec;
+			mExPtr = std::move(p);
+		}
+		std::exception_ptr getExpPtr() override {
+			return mExPtr;
+		}
+		error_code getErrorCode() override {
+			return mEc;
+		}
+
+		bool hasError()
+		{
+			return mEc &&
+				mEc != code::suspend;
+		}
 	};
 
 
@@ -357,22 +445,35 @@ namespace coproto
 			auto& proto = *mTask.mBase.get();
 			proto.mSched = prom.mSched;
 
-			prom.mSched->addProto(proto);
+			//prom.mSched->addProto(proto);
 
 			auto ec = proto.resume();
 
-			if (proto.done())
+			if (ec == code::suspend)
 			{
-				prom.mSched->removeProto(proto);
-
-				if (ec)
-					prom.mEc = ec;
-			}
-			else if(ec == code::noMessageAvailable)
+				prom.mUptream.push_back(&proto);
+				proto.mDownstream.push_back(&prom);
 				prom.mEc = ec;
-
+			}
+			else if (ec)
+			{
+				prom.mEc = ec;
+			}
 			return !ec;
 
+			//if (proto.done())
+			//{
+			//	if (ec)
+			//		prom.mEc = ec;
+
+			//	return !ec;
+			//}
+			//else if (ec == code::suspend)
+			//{
+			//	//prom.mSched->scheduleNext(proto);
+
+			//	prom.mEc = code::suspend;
+			//}
 		}
 		void await_suspend(coro_handle h)
 		{
@@ -383,9 +484,10 @@ namespace coproto
 		{
 			if constexpr (!std::is_same<void, T>::value)
 			{
-				auto& proto = *static_cast<ProtoPromiseBase<T>*>(mTask.mBase.get());
-				assert(proto.done());
-				auto ptr = (T*)proto.getValue();
+				//auto& proto = *static_cast<ProtoPromise<T>*>(mTask.mBase.get());
+				//return std::move(proto.mVal.value());
+				//assert(proto.done());
+				auto ptr = (T*)mTask.mBase->getValue();
 				assert(ptr);
 				//auto& prom = proto.mHandle.promise();
 				return std::move(*ptr);
@@ -405,12 +507,13 @@ namespace coproto
 			LocalScheduler* mSched;
 
 
-			std::vector<ProtoBase*> mStack;
+			std::list<ProtoBase*> mReady, mNext;
 
 			error_code recv(Buffer& data) override;
 			error_code send(Buffer& data) override;
-			void addProto(ProtoBase& proto) override;
-			void removeProto(ProtoBase& proto) override;
+			void scheduleNext(ProtoBase& proto) override;
+			void scheduleReady(ProtoBase& proto);
+			//void removeProto(ProtoBase& proto) override;
 
 			//void addProto(ProtoAwaiter<void>& awaiter) override;
 

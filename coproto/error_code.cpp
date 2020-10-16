@@ -22,6 +22,8 @@ namespace { // anonymous namespace
                 return "The io operation failed and the caller should abort";
             case coproto::code::noMessageAvailable:
                 return "Message has yet to arrive";
+            case coproto::code::suspend:
+                return "The protocol has been suspended for some reason.";
             case coproto::code::badBufferSize:
                 return "Bad buffer size. The reciever's buffer size does not match the number of bytes sent.";
             case coproto::code::bufferResizeNotMultipleOfValueType:

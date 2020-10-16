@@ -33,6 +33,16 @@ namespace coproto
 		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->recv(*this);
+
+			if (done())
+				finalize(mEc, nullptr);
+
+			if (mEc == code::noMessageAvailable)
+			{
+				mSched->scheduleNext(*this);
+				return code::suspend;
+			}
+
 			return mEc;
 		}
 
@@ -40,7 +50,7 @@ namespace coproto
 			return mEc != code::noMessageAvailable;
 		}
 
-		void setError(error_code& ec, std::exception_ptr&& p) override {
+		void setError(error_code ec, std::exception_ptr p) override {
 			assert(0 && "not supported (RefSendBuff)");
 		}
 		std::exception_ptr getExpPtr() override {
@@ -81,9 +91,18 @@ namespace coproto
 		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->recv(*this);
+			if (done())
+				finalize(mEc, nullptr);
+
+			if (mEc == code::noMessageAvailable)
+			{
+				mSched->scheduleNext(*this);
+				return code::suspend;
+			}
+
 			return mEc;
 		}
-		void setError(error_code& ec, std::exception_ptr&& p) override {
+		void setError(error_code ec, std::exception_ptr p) override {
 			assert(0 && "not supported (RefSendBuff)");
 		}
 		std::exception_ptr getExpPtr() override {
@@ -126,11 +145,14 @@ namespace coproto
 		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->send(*this);
+			if (done())
+				finalize(mEc, nullptr);
+
 			return mEc;
 		}
 
 
-		void setError(error_code& ec, std::exception_ptr&& p) override {
+		void setError(error_code ec, std::exception_ptr p) override {
 			assert(0 && "not supported (RefSendBuff)");
 		}
 		std::exception_ptr getExpPtr() override {
@@ -171,10 +193,13 @@ namespace coproto
 		error_code resume() override {
 			assert(mSched);
 			mEc = mSched->send(*this);
+			if (done())
+				finalize(mEc, nullptr);
+
 			return mEc;
 		}
 
-		void setError(error_code& ec, std::exception_ptr&& p) override {
+		void setError(error_code ec, std::exception_ptr p) override {
 			assert(0 && "not supported (RefSendBuff)");
 		}
 		std::exception_ptr getExpPtr() override {
@@ -242,32 +267,31 @@ namespace coproto
 
 	void coproto::LocalScheduler::Sched::runOne()
 	{
-		while (mStack.size())
+		while (mReady.size())
 		{
-			auto& frame = *mStack.back();
-			auto ec = frame.resume();
+			auto task = mReady.front();
+			mReady.pop_front();
 
-			if (ec == code::noMessageAvailable)
-				return;
+			auto ec = task->resume();
 
-			if (ec && mStack.size() > 1)
-			{
-				//auto& child = frame.mProto->mHandle.get().promise();
-				auto& parent = *mStack[mStack.size() - 2];
+			//if (ec && mReady.size() > 1)
+			//{
+			//	//auto& child = frame.mProto->mHandle.get().promise();
+			//	auto& parent = *mStack[mStack.size() - 2];
 
-				parent.setError(ec, std::move(frame.getExpPtr()));
+			//	parent.setError(ec, std::move(frame.getExpPtr()));
 
-				//if (awaiter.mReturnErrors == false)
-				//{
-				//	auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
-				//	parent.mExPtr = std::move(child.mExPtr);
-				//	parent.setError(child.mEc);
-				//}
-			}
+			//	//if (awaiter.mReturnErrors == false)
+			//	//{
+			//	//	auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
+			//	//	parent.mExPtr = std::move(child.mExPtr);
+			//	//	parent.setError(child.mEc);
+			//	//}
+			//}
 
-			mStack.pop_back();
+			//mStack.pop_back();
 
-			//if (!ec || ec != code::noMessageAvailable)
+			//if (!ec || ec != code::suspend)
 			//{
 			//	if (mStack.size() > 1 &&
 			//		ec)
@@ -284,11 +308,13 @@ namespace coproto
 
 
 		}
+
+		std::swap(mReady, mNext);
 	}
 
 	bool coproto::LocalScheduler::Sched::done()
 	{
-		return !mStack.size();
+		return mReady.size() == 0;
 	}
 
 
@@ -329,19 +355,27 @@ namespace coproto
 		return {};
 	}
 
-	void LocalScheduler::Sched::addProto(ProtoBase& proto)
+	void LocalScheduler::Sched::scheduleNext(ProtoBase& proto)
 	{
-		mStack.push_back(&proto);
+		mNext.push_back(&proto);
 
 		assert(proto.mSched == nullptr || proto.mSched == this);
 		proto.mSched = this;
 	}
 
-	void LocalScheduler::Sched::removeProto(ProtoBase& proto)
+	void LocalScheduler::Sched::scheduleReady(ProtoBase& proto)
 	{
-		assert(&proto == mStack.back());
-		mStack.pop_back();
+		mReady.push_back(&proto);
+
+		assert(proto.mSched == nullptr || proto.mSched == this);
+		proto.mSched = this;
 	}
+
+	//void LocalScheduler::Sched::removeProto(ProtoBase& proto)
+	//{
+	//	assert(&proto == mStack.back());
+	//	mStack.pop_back();
+	//}
 
 	error_code LocalScheduler::execute(Proto<void>& p0, Proto<void>& p1)
 	{
@@ -350,8 +384,8 @@ namespace coproto
 		mScheds[1].mIdx = 1;
 		mScheds[1].mSched = this;
 
-		mScheds[0].addProto(*p0.mBase.get());
-		mScheds[1].addProto(*p1.mBase.get());
+		mScheds[0].scheduleReady(*p0.mBase.get());
+		mScheds[1].scheduleReady(*p1.mBase.get());
 
 		while (
 			mScheds[0].done() == false ||
@@ -361,21 +395,28 @@ namespace coproto
 			if (mScheds[0].done() == false)
 			{
 				mScheds[0].runOne();
+
+				if (mScheds[0].done())
+				{
+					auto e0 = p0.mBase->getErrorCode();
+					if (e0)
+						return e0;
+				}
 			}
+
 			if (mScheds[1].done() == false)
 			{
 				mScheds[1].runOne();
-			}
 
+				if (mScheds[1].done())
+				{
+					auto e1 = p1.mBase->getErrorCode();
+					if (e1)
+						return e1;
+				}
+			}
 		}
 
-		auto e0 = p0.mBase->getErrorCode();
-		if (e0)
-			return e0;
-		auto e1 = p1.mBase->getErrorCode();
-		if (e1)
-			return e1;
-		//if()
 		return {};
 	}
 
@@ -440,12 +481,18 @@ namespace coproto
 				{
 					if (party)
 					{
+						//std::cout << " p1 sent " << i << std::endl;
 						auto ec = co_await send(str).wrap();
-						//std::cout << " p1 sent" << std::endl;
-						Result<std::string> r = co_await recv<std::string>().wrap();
+						//std::cout << " p1 sent " << i << " ok" << std::endl;
 
-						str = r.unwrap();
-						//std::cout << " p1 recv" << std::endl;
+						//std::cout << " p1 recv " << i << std::endl;
+						Result<std::string> r = co_await recv<std::string>().wrap();
+						//std::cout << " p1 recv " << i << " ok " << std::endl;
+
+						if (r.hasError())
+							throw std::runtime_error(LOCATION);
+
+						str = r.value();
 
 						if (str != "hello from " + std::to_string(i * 2 + 1))
 							throw std::runtime_error(LOCATION);
@@ -453,15 +500,18 @@ namespace coproto
 					}
 					else
 					{
+						//std::cout << " p0 recv " << i << std::endl;
 						co_await recv(str);
-						//std::cout << " p0 recv" << std::endl;
+						//std::cout << " p0 recv " << i << " ok" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
 							throw std::runtime_error(LOCATION);
 
 						str.back() += 1;
+
+						//std::cout << " p0 sent " << i << std::endl;
 						co_await send(str);
-						//std::cout << " p0 sent" << std::endl;
+						//std::cout << " p0 sent " << i << " ok" << std::endl;
 
 					}
 				}

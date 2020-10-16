@@ -79,8 +79,6 @@ namespace coproto
         using value_type = std::remove_cvref_t<T>;
         using error_type = std::remove_cvref_t<Error>;
 
-        //static_assert(!std::is_same_v< value_type, error_type>, "");
-
         Result(OkTag<value_type>&& v) :mVar(v.mV){}
         Result(OkMvTag<value_type>&&v) : mVar(std::move(v.mV)) {}
         Result(ErrorTag<error_type>&&e): mVar(e.mE) {}
@@ -98,50 +96,32 @@ namespace coproto
         };
 
 
-        bool hasValue()
-        {
-            //return std::holds_alternative<value_type>(var());
+        bool hasValue() const {
             return var().index() == 0;
         }
 
-        bool hasError()
-        {
+        bool hasError() const {
             return !hasValue();
         }
 
-        operator bool()
-        {
+        explicit operator bool() {
             return hasError();
         }
 
-        value_type& unwrap()
+        value_type& value()
         {
             if (hasError())
-                throw std::runtime_error("unwrap() was called on a Result<T,E> which stores an error_type");
+                throw std::runtime_error("value() was called on a Result<T,E> which stores an error_type");
 
             return std::get<0>(var());
         }
 
-        const value_type& unwrap() const
+        const value_type& value() const
         {
             if (hasError())
-                throw std::runtime_error("unwrap() was called on a Result<T,E> which stores an error_type");
+                throw std::runtime_error("value() was called on a Result<T,E> which stores an error_type");
 
-            return std::get<0>(var());
-        }
-
-        value_type& unwrapOr(value_type& alt)
-        {
-            if (hasError())
-                return alt;
-            return std::get<0>(var());
-        }
-
-        const value_type& unwrapOr(const value_type& alt) const
-        {
-            if (hasError())
-                return alt;
-            return std::get<0>(var());
+            return value();
         }
 
         error_type& error()
@@ -159,6 +139,39 @@ namespace coproto
 
             return std::get<1>(var());
         }
+
+
+
+
+
+        value_type& valueOr(value_type& alt)
+        {
+            if (hasError())
+                return alt;
+            return value();
+        }
+
+        const value_type& valueOr(const value_type& alt) const
+        {
+            if (hasError())
+                return alt;
+            return value();
+        }
+
+        error_type& errorOr(error_type& alt)
+        {
+            if (hasError())
+                return error();
+            return alt;
+        }
+
+        const error_type& errorOr(const error_type& alt) const
+        {
+            if (hasError())
+                return error();
+            return alt;
+        }
+
 
 
         void operator=(OkMvTag<value_type>&& v)
