@@ -371,67 +371,6 @@ namespace coproto
 		proto.mSched = this;
 	}
 
-	//void LocalScheduler::Sched::removeProto(ProtoBase& proto)
-	//{
-	//	assert(&proto == mStack.back());
-	//	mStack.pop_back();
-	//}
-
-	error_code LocalScheduler::execute(Proto<void>& p0, Proto<void>& p1)
-	{
-		bool v = false;
-		mScheds[0].mIdx = 0;
-		mScheds[0].mSched = this;
-		mScheds[1].mIdx = 1;
-		mScheds[1].mSched = this;
-
-		mScheds[0].scheduleReady(*p0.mBase.get());
-		mScheds[1].scheduleReady(*p1.mBase.get());
-
-		while (
-			mScheds[0].done() == false ||
-			mScheds[1].done() == false)
-		{
-
-			if (mScheds[0].done() == false)
-			{
-				mScheds[0].runOne();
-				if (v)
-					std::cout << "p0 end of round " << std::endl;
-
-				if (mScheds[0].done())
-				{
-					auto e0 = p0.mBase->getErrorCode();
-					if (e0)
-						return e0;
-				}
-			}
-
-			if (mScheds[1].done() == false)
-			{
-				mScheds[1].runOne();
-
-				if (v)
-					std::cout << "p1 end of round " << std::endl;
-
-				if (mScheds[1].done())
-				{
-					auto e1 = p1.mBase->getErrorCode();
-					if (e1)
-						return e1;
-				}
-			}
-		}
-
-		return {};
-	}
-
-
-
-
-
-
-
 
 	namespace tests
 	{
@@ -531,6 +470,25 @@ namespace coproto
 		}
 
 
+		void returnValueTest()
+		{
+			int val = 42;
+			auto proto = [val](bool party) -> Proto<int> {
+				std::string str("hello from 0");
+				co_return val;
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error(ec.message());
+
+			if (*(int*)p0.mBase->getValue() != val)
+				throw std::runtime_error("");
+			if (*(int*)p1.mBase->getValue() != val)
+				throw std::runtime_error("");
+		}
 
 
 		void typedRecvTest()
@@ -873,10 +831,10 @@ namespace coproto
 
 					auto fu0 = co_await echoServer(n, 5, name).async();
 					auto fu1 = co_await echoServer(n + 2, 6, name).async();
-					co_await echoClient(n, 10, name);
 					auto fu2 = co_await echoServer(n, 7, name).async();
 					auto fu3 = co_await echoServer(n + 7, 8, name).async();
 					auto fu4 = co_await echoServer(n, 9, name).async();
+					co_await echoClient(n, 10, name);
 					//co_await send(buff);
 
 					co_await fu0;
@@ -892,10 +850,10 @@ namespace coproto
 					//co_await recv(buff);
 					auto fu0 = co_await echoClient(n, 5, name).async();
 					auto fu1 = co_await echoClient(n + 2, 6, name).async();
-					co_await echoServer(n, 10, name);
 					auto fu2 = co_await echoClient(n, 7, name).async();
 					auto fu3 = co_await echoClient(n + 7, 8, name).async();
 					auto fu4 = co_await echoClient(n, 9, name).async();
+					co_await echoServer(n, 10, name);
 					//co_await recv(buff);
 
 					co_await fu0;

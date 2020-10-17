@@ -98,17 +98,6 @@ namespace coproto
 		}
 	};
 
-	template<typename T>
-	struct Optional;
-
-	template<>
-	struct Optional<void>
-	{};
-
-	template<typename T>
-	struct Optional : public std::optional<T>
-	{};
-
 
 	namespace internal
 	{
@@ -298,14 +287,22 @@ namespace coproto
 
 		std::unique_ptr<Controller> mBase;
 
-		//typename ResultWrapper<T>::type wrap()
-		//{
-		//	typename ResultWrapper<T>::type r;
-		//	r.mBase.emplace<ResultWrapper<T>>(std::move(mBase));
-		//	return r;
-		//}
+
+		Async() = default;
+		Async(const Async<T>&) = delete;
+		Async(Async<T>&&) = default;
 
 
+		Async<T>& operator=(Async<T>&&) = default;
+
+		~Async()
+		{
+			if (mBase && mBase->mState == Controller::State::InProgress)
+			{
+				assert(0 && "the caller must join the async operation before the Async is destroyed.");
+				std::terminate();
+			}
+		}
 	};
 
 	// will return an Async<T>
@@ -361,16 +358,48 @@ namespace coproto
 		};
 	};
 
+	template<typename T>
+	struct ReturnStorage;
+
+	template<>
+	struct ReturnStorage<void>
+	{
+		int& value() { int i; return i; }
+
+		void return_void()
+		{}
+	};
+
+	template<typename T>
+	struct ReturnStorage 
+	{
+		static_assert(std::is_void_v<T> == false, "");
+		std::optional<T> mVal;
+
+		void return_value(T&& t)
+		{
+			mVal = std::forward<T>(t);
+		}
+
+		void return_value(const T& t)
+		{
+			mVal = t;
+		}
+
+		T& value()
+		{
+			return mVal.value();
+		}
+	};
 
 
 	template<typename T>
-	class ProtoPromise : public ProtoBase
+	class ProtoPromise : public ProtoBase, public ReturnStorage<T>
 	{
 	public:
 		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
 		std::exception_ptr mExPtr;
 		error_code mEc;
-		Optional<T> mVal;
 
 		ProtoPromise() { }
 		~ProtoPromise() { }
@@ -388,7 +417,7 @@ namespace coproto
 		}
 		std::suspend_always initial_suspend() { return {}; }
 		std::suspend_always final_suspend() noexcept { return {}; }
-		void return_void() {}
+
 		void unhandled_exception() {
 			mExPtr = std::current_exception();
 			mEc = code::uncaughtException;
@@ -396,30 +425,12 @@ namespace coproto
 
 		template<typename U>
 		ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
-
-
-
 		template<typename U>
 		AsyncAwaiter<U, T> await_transform(Async<U>&& p);
-
-
 		template<typename U>
 		AsyncAwaiter<U, T> await_transform(Async<U>& p);
-
-
-
 		EndOfRoundAwaiter<T> await_transform(EndOfRound& p);
 		EndOfRoundAwaiter<T> await_transform(EndOfRound&& p);
-
-
-
-
-
-
-
-
-
-
 
 		error_code resume() override {
 
@@ -442,7 +453,7 @@ namespace coproto
 				return nullptr;
 			else
 			{
-				return &mVal.value();
+				return &ReturnStorage<T>::value();
 			}
 		}
 
@@ -611,21 +622,64 @@ namespace coproto
 			error_code recv(Buffer& data) override;
 			error_code send(Buffer& data) override;
 			void scheduleNext(ProtoBase& proto) override;
-			void scheduleReady(ProtoBase& proto);
-			//void removeProto(ProtoBase& proto) override;
-
-			//void addProto(ProtoAwaiter<void>& awaiter) override;
-
+			void scheduleReady(ProtoBase& proto) override;
 
 			void runOne();
-
 			bool done();
 		};
 
 		std::array<std::list<std::vector<u8>>, 2> mBuffs;
 		std::array<Sched, 2> mScheds;
 
-		error_code execute(Proto<void>& p0, Proto<void>& p1);
+		template<typename T>
+		error_code execute(Proto<T>& p0, Proto<T>& p1)
+		{
+			bool v = false;
+			mScheds[0].mIdx = 0;
+			mScheds[0].mSched = this;
+			mScheds[1].mIdx = 1;
+			mScheds[1].mSched = this;
+
+			mScheds[0].scheduleReady(*p0.mBase.get());
+			mScheds[1].scheduleReady(*p1.mBase.get());
+
+			while (
+				mScheds[0].done() == false ||
+				mScheds[1].done() == false)
+			{
+
+				if (mScheds[0].done() == false)
+				{
+					mScheds[0].runOne();
+					if (v)
+						std::cout << "p0 end of round " << std::endl;
+
+					if (mScheds[0].done())
+					{
+						auto e0 = p0.mBase->getErrorCode();
+						if (e0)
+							return e0;
+					}
+				}
+
+				if (mScheds[1].done() == false)
+				{
+					mScheds[1].runOne();
+
+					if (v)
+						std::cout << "p1 end of round " << std::endl;
+
+					if (mScheds[1].done())
+					{
+						auto e1 = p1.mBase->getErrorCode();
+						if (e1)
+							return e1;
+					}
+				}
+			}
+
+			return {};
+		}
 	};
 
 
@@ -633,6 +687,7 @@ namespace coproto
 	{
 		void strSendRecvTest();
 		void resultSendRecvTest();
+		void returnValueTest();
 		void typedRecvTest();
 
 		void zeroSendRecvTest();
