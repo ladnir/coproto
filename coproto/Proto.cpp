@@ -2,7 +2,8 @@
 #define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include "Proto.h"
-
+#include <algorithm>
+#include <numeric>
 #include <string>
 #include "cryptoTools/Common/Defines.h"
 namespace coproto
@@ -308,7 +309,6 @@ namespace coproto
 
 
 		}
-
 		std::swap(mReady, mNext);
 	}
 
@@ -379,6 +379,7 @@ namespace coproto
 
 	error_code LocalScheduler::execute(Proto<void>& p0, Proto<void>& p1)
 	{
+		bool v = false;
 		mScheds[0].mIdx = 0;
 		mScheds[0].mSched = this;
 		mScheds[1].mIdx = 1;
@@ -395,6 +396,8 @@ namespace coproto
 			if (mScheds[0].done() == false)
 			{
 				mScheds[0].runOne();
+				if (v)
+					std::cout << "p0 end of round " << std::endl;
 
 				if (mScheds[0].done())
 				{
@@ -407,6 +410,9 @@ namespace coproto
 			if (mScheds[1].done() == false)
 			{
 				mScheds[1].runOne();
+
+				if (v)
+					std::cout << "p1 end of round " << std::endl;
 
 				if (mScheds[1].done())
 				{
@@ -676,25 +682,55 @@ namespace coproto
 		}
 
 
-		Proto<> echoServer(u64 i)
+		Proto<> echoServer(u64 i, u64 length = 10, std::string name = "p1", bool v = false)
 		{
-			//std::cout << "p1 echo recv " << i << std::endl;
-			auto msg = co_await recv<std::string>();
-			//std::cout << "p1 echo send " << i << std::endl;
+
+			auto exp = std::vector<char>(length);
+			std::iota(exp.begin(), exp.end(), 0);
+
+			if (v)
+				std::cout << name << " es start " << i << " " << length << std::endl;
+
+			if (v)
+				std::cout << name << " es recv " << i << " " << length << " begin" << std::endl;
+			auto msg = co_await recv<std::vector<char>>();
+			if (v)
+				std::cout << name << " es recv " << i << " " << length << " done" << std::endl;
+
+			if (exp != msg)
+				throw std::runtime_error("");
+
+
+			if (v)
+				std::cout << name << " es send " << i << " " << length << std::endl;
 			co_await send(msg);
+
+			co_await EndOfRound();
 
 			if (i)
 			{
 				echoServer(i - 1);
 			}
 		}
-		Proto<> echoClient(u64 i)
+		Proto<> echoClient(u64 i, u64 length = 10, std::string name = "p0", bool v = false)
 		{
-			auto msg = std::string("hello world");
-			//std::cout << "p0 echo send " << i << std::endl;
+			if (v)
+				std::cout << name << " ec start " << i << " " << length << std::endl;
+
+			auto msg = std::vector<char>(length);
+			std::iota(msg.begin(), msg.end(), 0);
+			if (v)
+				std::cout << name << " ec send " << i << " " << length << std::endl;
 			co_await send(msg);
-			//std::cout << "p0 echo recv " << i << std::endl;
-			if (msg != co_await recv<std::string>())
+			co_await EndOfRound();
+
+			if (v)
+				std::cout << name << " ec recv " << i << " " << length << " begin" << std::endl;
+			auto rev = co_await recv<std::vector<char>>();
+
+			if (v)
+				std::cout << name << " ec recv " << i << " " << length << " done" << std::endl;
+			if (msg != rev)
 			{
 				throw std::runtime_error("hello world");
 			}
@@ -796,7 +832,7 @@ namespace coproto
 		void nestedProtocolErrorCodeTest()
 		{
 			bool hasEc = false;
-			u64 n = 0;
+			u64 n = 5;
 			auto proto = [&hasEc, n](bool party) -> Proto<> {
 
 				if (party)
@@ -804,10 +840,9 @@ namespace coproto
 					std::vector<u64> buff(10);
 					co_await send(buff);
 					auto ec = co_await throwServer(n).wrap();
-					if (ec)
-					{
+
+					if (ec == code::uncaughtException)
 						hasEc = true;
-					}
 				}
 				else
 				{
@@ -821,6 +856,93 @@ namespace coproto
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
 			if (ec || !hasEc)
+				throw std::runtime_error("");
+		}
+
+
+		void asyncProtocolTest()
+		{
+			u64 n = 4;
+			auto proto = [n](bool party) -> Proto<> {
+
+				if (party)
+				{
+					auto name = std::string("p1");
+					std::vector<u64> buff(10);
+					//co_await send(buff);
+
+					auto fu0 = co_await echoServer(n, 5, name).async();
+					auto fu1 = co_await echoServer(n + 2, 6, name).async();
+					co_await echoClient(n, 10, name);
+					auto fu2 = co_await echoServer(n, 7, name).async();
+					auto fu3 = co_await echoServer(n + 7, 8, name).async();
+					auto fu4 = co_await echoServer(n, 9, name).async();
+					//co_await send(buff);
+
+					co_await fu0;
+					co_await fu1;
+					co_await fu2;
+					co_await fu3;
+					co_await fu4;
+				}
+				else
+				{
+					auto name = std::string("p0");
+					std::vector<u64> buff(10);
+					//co_await recv(buff);
+					auto fu0 = co_await echoClient(n, 5, name).async();
+					auto fu1 = co_await echoClient(n + 2, 6, name).async();
+					co_await echoServer(n, 10, name);
+					auto fu2 = co_await echoClient(n, 7, name).async();
+					auto fu3 = co_await echoClient(n + 7, 8, name).async();
+					auto fu4 = co_await echoClient(n, 9, name).async();
+					//co_await recv(buff);
+
+					co_await fu0;
+					co_await fu1;
+					co_await fu2;
+					co_await fu3;
+					co_await fu4;
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec)
+				throw std::runtime_error("");
+		}
+
+		void asyncThrowProtocolTest()
+		{
+			u64 n = 3;
+			auto proto = [n](bool party) -> Proto<> {
+
+				if (party)
+				{
+					std::vector<u64> buff(10);
+					co_await send(buff);
+
+					auto token = co_await throwServer(n).async();
+					//co_await send(buff);
+
+					co_await token;
+				}
+				else
+				{
+					std::vector<u64> buff(10);
+					co_await recv(buff);
+					co_await throwClient(n);
+					//co_await recv(buff);
+
+					//co_await fu;
+				}
+			};
+			auto p0 = proto(0);
+			auto p1 = proto(1);
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+			if (ec != code::uncaughtException)
 				throw std::runtime_error("");
 		}
 

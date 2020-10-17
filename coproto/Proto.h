@@ -18,9 +18,16 @@ namespace coproto
 	class ProtoPromise;
 	template<typename T>
 	class Proto;
-
+	template<typename T>
+	class Async;
 	template<typename T, typename U>
 	class ProtoAwaiter;
+	template<typename T, typename U>
+	class AsyncAwaiter;
+
+	struct EndOfRound
+	{
+	};
 
 
 	class ProtoBase
@@ -41,16 +48,12 @@ namespace coproto
 		void finalize(error_code ec, std::exception_ptr p)
 		{
 			assert(mUptream.size() == 0);
-			if (ec)
-			{
-				for (auto d : mDownstream)
-				{
+			if (ec) {
+				for (auto d : mDownstream) {
 					d->setError(ec, p);
 				}
 			}
-
-			for (auto d : mDownstream)
-			{
+			for (auto d : mDownstream) {
 				auto iter = std::find(d->mUptream.begin(), d->mUptream.end(), this);
 				assert(iter != d->mUptream.end());
 				std::swap(*iter, d->mUptream.back());
@@ -70,15 +73,30 @@ namespace coproto
 		virtual void setError(error_code e, std::exception_ptr p) = 0;
 		virtual std::exception_ptr getExpPtr() = 0;
 		virtual error_code getErrorCode() = 0;
-
-		//Scheduler& getSched()
-		//{
-		//	assert(mSched);
-		//	return *mSched;
-		//};
 	};
 
 
+	template<typename T>
+	struct EndOfRoundAwaiter
+	{
+		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
+		ProtoBase* mParent;
+		EndOfRoundAwaiter(ProtoBase* parent)
+			:mParent(parent)
+		{}
+
+		bool await_ready()
+		{
+			mParent->setError(code::suspend, nullptr);
+			mParent->mSched->scheduleNext(*mParent);
+			return false;
+		}
+		void await_suspend(coro_handle h) { }
+
+		void await_resume()
+		{
+		}
+	};
 
 	template<typename T>
 	struct Optional;
@@ -90,94 +108,6 @@ namespace coproto
 	template<typename T>
 	struct Optional : public std::optional<T>
 	{};
-
-
-	//// TODO("merge this with ProtoPromise");
-	//template<typename T>
-	//class ProtoPromiseBase : public ProtoBase
-	//{
-	//public:
-	//	using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
-	//	coro_handle mHandle;
-
-	//	ProtoPromiseBase(coro_handle t)
-	//		:mHandle(t)
-	//	{}
-
-	//	ProtoPromiseBase() = delete;
-	//	ProtoPromiseBase(const ProtoPromiseBase&) = delete;
-	//	ProtoPromiseBase(ProtoPromiseBase&& o)
-	//		: ProtoBase(o.mSched),
-	//		mHandle(o.mHandle)
-	//	{
-	//		o.mSched = nullptr;
-	//		o.mHandle = nullptr;
-	//	}
-
-	//	~ProtoPromiseBase()
-	//	{
-	//		if (mHandle)
-	//			mHandle.destroy();
-	//	}
-
-
-	//	error_code resume() override {
-
-	//		assert(!mHandle.done());
-	//		assert(mSched);
-	//		auto& prom = mHandle.promise();
-
-	//		prom.mSched = mSched;
-
-	//		if (prom.mEc == code::suspend)
-	//			prom.mEc = {};
-
-	//		if(!prom.mEc)
-	//			mHandle.resume();
-
-	//		if (done())
-	//			finalize();
-
-	//		return prom.mEc;
-	//	};
-
-	//	Optional<T> mVal;
-	//	void* getValue()
-	//	{
-	//		if constexpr (std::is_void_v<T>)
-	//			return nullptr;
-	//		else
-	//		{
-	//			return &mVal.value();
-	//		}
-	//	}
-
-	//	bool done() override {
-	//		return hasError() || mHandle.done();
-	//	}
-
-
-	//	void setError(error_code& ec, std::exception_ptr&& p) override {
-	//		auto& prom = mHandle.promise();
-	//		assert(!prom.mEc || prom.mEc == code::suspend);
-	//		prom.mEc = ec;
-	//		prom.mExPtr = std::move(p);
-	//	}
-	//	std::exception_ptr getExpPtr() override {
-	//		auto& prom = mHandle.promise();
-	//		return prom.mExPtr;
-	//	}
-	//	error_code getErrorCode() override {
-	//		auto& prom = mHandle.promise();
-	//		return prom.mEc;
-	//	}
-
-	//	bool hasError()
-	//	{
-	//		return mHandle.promise().mEc &&
-	//			mHandle.promise().mEc != code::suspend;
-	//	}
-	//};
 
 
 	namespace internal
@@ -292,6 +222,147 @@ namespace coproto
 
 
 
+
+	template<typename T>
+	class Async
+	{
+	public:
+
+		// will return a T
+		struct Controller : public ProtoBase
+		{
+			internal::Inline<ProtoBase> mBase;
+
+			enum class State
+			{
+				Init,
+				InProgress,
+				Done
+			};
+			State mState = State::Init;
+			error_code mEc;
+			std::exception_ptr mExPtr;
+
+
+			error_code resume() override
+			{
+				assert(mSched);
+				mBase->mSched = mSched;
+
+				if (mState == State::Init)
+				{
+					auto ec = mBase->resume();
+					if (ec == code::suspend)
+					{
+						mState = State::InProgress;
+						mUptream.push_back(mBase.get());
+						mBase->mDownstream.push_back(this);
+					}
+					else
+					{
+						mState = State::Done;
+						assert(mBase->done());
+
+						if (ec)
+							setError(ec, mBase->getExpPtr());
+
+						//
+
+					}
+				}
+				else if (mState == State::InProgress)
+				{
+					assert(mBase->done());
+					mState = State::Done;
+					finalize(mEc, mExPtr);
+				}
+				return {};
+			}
+
+			bool done() override {
+				return mState == State::Done;
+			};
+
+			void* getValue() override { return mBase->getValue(); };
+			void setError(error_code e, std::exception_ptr p)override {
+				mEc = e;
+				mExPtr = std::move(p);
+			}
+			std::exception_ptr getExpPtr() override {
+				return mExPtr;
+			}
+			error_code getErrorCode() override {
+				return mEc;
+			}
+		};
+
+		std::unique_ptr<Controller> mBase;
+
+		//typename ResultWrapper<T>::type wrap()
+		//{
+		//	typename ResultWrapper<T>::type r;
+		//	r.mBase.emplace<ResultWrapper<T>>(std::move(mBase));
+		//	return r;
+		//}
+
+
+	};
+
+	// will return an Async<T>
+	template<typename T>
+	class AsyncWrapper : public ProtoBase
+	{
+	public:
+
+		using Controller = typename Async<T>::Controller;
+
+		internal::Inline<ProtoBase> mBase;
+		Async<T> mRet;
+
+		AsyncWrapper(internal::Inline<ProtoBase>&& o)
+			: mBase(std::move(o))
+		{}
+
+		AsyncWrapper(AsyncWrapper&& o)
+			: ProtoBase(o.mSched),
+			mBase(std::move(o.mBase))
+		{
+			o.mSched = nullptr;
+		}
+
+		error_code resume() override
+		{
+			assert(!done());
+			assert(mSched);
+			mRet.mBase.reset(new Controller);
+			auto ptr = (Controller*)mRet.mBase.get();
+			ptr->mBase = std::move(mBase);
+			ptr->mSched = mSched;
+			return ptr->resume();			
+		}
+
+		bool done() override {
+			return mRet.mBase.get() != nullptr;
+		};
+
+		void* getValue() override { return &mRet; };
+		void setError(error_code e, std::exception_ptr p)override {
+			assert(0);
+			//mEc = e;
+			//mExPtr = std::move(p);
+		}
+		std::exception_ptr getExpPtr() override {
+			assert(0); //return mExPtr;
+			std::terminate();
+		}
+		error_code getErrorCode() override {
+			assert(0);// return mEc;
+			std::terminate();
+		};
+	};
+
+
+
 	template<typename T>
 	class ProtoPromise : public ProtoBase
 	{
@@ -326,6 +397,19 @@ namespace coproto
 		template<typename U>
 		ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
 
+
+
+		template<typename U>
+		AsyncAwaiter<U, T> await_transform(Async<U>&& p);
+
+
+		template<typename U>
+		AsyncAwaiter<U, T> await_transform(Async<U>& p);
+
+
+
+		EndOfRoundAwaiter<T> await_transform(EndOfRound& p);
+		EndOfRoundAwaiter<T> await_transform(EndOfRound&& p);
 
 
 
@@ -388,20 +472,6 @@ namespace coproto
 	};
 
 
-	//template<typename T>
-	//struct WrapResult;
-	//template<>
-	//struct WrapResult<void>
-	//{
-	//	using type = Proto<error_code>;
-	//};
-
-
-	//template<typename T>
-	//struct WrapResult
-	//{
-	//	using type = Proto<Result<T, error_code>>;
-	//};
 
 	template<typename T = void>
 	class Proto
@@ -413,8 +483,6 @@ namespace coproto
 
 		using value_type = T;
 
-
-
 		typename ResultWrapper<T>::type wrap()
 		{
 			typename ResultWrapper<T>::type r;
@@ -422,6 +490,12 @@ namespace coproto
 			return r;
 		}
 
+		Proto<Async<T>> async()
+		{
+			Proto<Async<T>> r;
+			r.mBase.setOwned(new AsyncWrapper<T>(std::move(mBase)));
+			return r;
+		}
 	};
 
 
@@ -444,9 +518,6 @@ namespace coproto
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
 			proto.mSched = prom.mSched;
-
-			//prom.mSched->addProto(proto);
-
 			auto ec = proto.resume();
 
 			if (ec == code::suspend)
@@ -460,40 +531,68 @@ namespace coproto
 				prom.mEc = ec;
 			}
 			return !ec;
-
-			//if (proto.done())
-			//{
-			//	if (ec)
-			//		prom.mEc = ec;
-
-			//	return !ec;
-			//}
-			//else if (ec == code::suspend)
-			//{
-			//	//prom.mSched->scheduleNext(proto);
-
-			//	prom.mEc = code::suspend;
-			//}
 		}
-		void await_suspend(coro_handle h)
-		{
-			///*mTask.mBase.get()->await_suspend(h)*/; 
-		}
+		void await_suspend(coro_handle h) { }
 
 		T await_resume()
 		{
 			if constexpr (!std::is_same<void, T>::value)
 			{
-				//auto& proto = *static_cast<ProtoPromise<T>*>(mTask.mBase.get());
-				//return std::move(proto.mVal.value());
-				//assert(proto.done());
 				auto ptr = (T*)mTask.mBase->getValue();
 				assert(ptr);
-				//auto& prom = proto.mHandle.promise();
 				return std::move(*ptr);
 			}
 		}
 	};
+
+
+
+	template<typename T, typename U>
+	class AsyncAwaiter
+	{
+	public:
+		Async<T> mTask;
+		using coro_handle = std::coroutine_handle<ProtoPromise<U>>;
+		coro_handle mHandle;
+
+		AsyncAwaiter(coro_handle handle, Async<T>&& t)
+			: mTask(std::move(t))
+			, mHandle(handle)
+		{
+		}
+
+		bool await_ready()
+		{
+			auto& prom = mHandle.promise();
+			auto& proto = *mTask.mBase.get();
+			proto.mSched = prom.mSched;
+
+
+			if (proto.done())
+			{
+				return true;
+			}
+			else
+			{
+				prom.mUptream.push_back(&proto);
+				proto.mDownstream.push_back(&prom);
+				return false;
+			}
+			
+		}
+		void await_suspend(coro_handle h) { }
+
+		T await_resume()
+		{
+			if constexpr (!std::is_same<void, T>::value)
+			{
+				auto ptr = (T*)mTask.mBase->getValue();
+				assert(ptr);
+				return std::move(*ptr);
+			}
+		}
+	};
+
 
 
 
@@ -547,6 +646,8 @@ namespace coproto
 		void nestedSendRecvTest();
 		void nestedProtocolThrowTest();
 		void nestedProtocolErrorCodeTest();
+		void asyncProtocolTest();
+		void asyncThrowProtocolTest();
 	}
 
 	template<typename T>
@@ -556,6 +657,36 @@ namespace coproto
 		return ProtoAwaiter<U, T>(
 			coro_handle::from_promise(*this),
 			std::move(p));
+	}
+
+	template<typename T>
+	template<typename U>
+	inline AsyncAwaiter<U, T> ProtoPromise<T>::await_transform(Async<U>&& p)
+	{
+		return AsyncAwaiter<U, T>(
+			coro_handle::from_promise(*this),
+			std::move(p));
+	}
+	template<typename T>
+	template<typename U>
+	inline AsyncAwaiter<U, T> ProtoPromise<T>::await_transform(Async<U>& p)
+	{
+		return AsyncAwaiter<U, T>(
+			coro_handle::from_promise(*this),
+			std::move(p));
+	}
+
+
+
+	template<typename T>
+	EndOfRoundAwaiter<T> ProtoPromise<T>::await_transform(EndOfRound& p)
+	{
+		return EndOfRoundAwaiter<T>(this);
+	}
+	template<typename T>
+	EndOfRoundAwaiter<T> ProtoPromise<T>::await_transform(EndOfRound&& p)
+	{
+		return EndOfRoundAwaiter<T>(this);
 	}
 
 }

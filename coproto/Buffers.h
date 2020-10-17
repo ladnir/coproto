@@ -142,7 +142,12 @@ namespace coproto
                 mData = ptr;
                 isOwning() = false;
             }
-
+            void setOwned(Interface* ptr)
+            {
+                mData = ptr;
+                isOwning() = true;
+            }
+            
             bool isStoredInline() const
             {
                 auto begin = (u8*)this;

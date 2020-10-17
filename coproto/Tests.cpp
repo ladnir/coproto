@@ -25,7 +25,8 @@ namespace coproto
 		t.add("nestedSendRecvTest              ", tests::nestedSendRecvTest);
 		t.add("nestedProtocolThrowTest         ", tests::nestedProtocolThrowTest);
 		t.add("nestedProtocolErrorCodeTest     ", tests::nestedProtocolErrorCodeTest);
-
+		t.add("asyncProtocolTest               ", tests::asyncProtocolTest);
+		t.add("asyncThrowProtocolTest          ", tests::asyncThrowProtocolTest);
 		
 		t.add("v1::intSendRecvTest             ", v1::tests::intSendRecvTest);
 		t.add("v1::arraySendRecvTest           ", v1::tests::arraySendRecvTest);
