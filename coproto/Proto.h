@@ -9,6 +9,7 @@
 #include <optional>
 #include <iostream>
 #include "Result.h"
+//#define USE_INLINE
 
 namespace coproto
 {
@@ -28,7 +29,7 @@ namespace coproto
 	struct EndOfRound
 	{
 	};
-
+	const int inlineSize = 100;
 
 	class ProtoBase
 	{
@@ -37,36 +38,38 @@ namespace coproto
 		ProtoBase(const ProtoBase&) = default;
 		ProtoBase(ProtoBase&&) = default;
 
-		ProtoBase(Scheduler* s)
-			:mSched(s)
-		{}
+		//ProtoBase(Scheduler* s)
+		//	:mSched(s)
+		//{}
 
-		Scheduler* mSched = nullptr;
-		std::vector<ProtoBase*> mDownstream;
-		std::vector<ProtoBase*> mUptream;
+		virtual ~ProtoBase() {}
 
-		void finalize(error_code ec, std::exception_ptr p)
-		{
-			assert(mUptream.size() == 0);
-			if (ec) {
-				for (auto d : mDownstream) {
-					d->setError(ec, p);
-				}
-			}
-			for (auto d : mDownstream) {
-				auto iter = std::find(d->mUptream.begin(), d->mUptream.end(), this);
-				assert(iter != d->mUptream.end());
-				std::swap(*iter, d->mUptream.back());
-				d->mUptream.pop_back();
+		//Scheduler* mSched = nullptr;
+		//std::vector<ProtoBase*> mDownstream;
+		//std::vector<ProtoBase*> mUptream;
 
-				if (d->mUptream.size() == 0)
-				{
-					mSched->scheduleReady(*d);
-				}
-			}
-		}
+		//void finalize(error_code ec, std::exception_ptr p)
+		//{
+		//	assert(mUptream.size() == 0);
+		//	if (ec) {
+		//		for (auto d : mDownstream) {
+		//			d->setError(ec, p);
+		//		}
+		//	}
+		//	for (auto d : mDownstream) {
+		//		auto iter = std::find(d->mUptream.begin(), d->mUptream.end(), this);
+		//		assert(iter != d->mUptream.end());
+		//		std::swap(*iter, d->mUptream.back());
+		//		d->mUptream.pop_back();
 
-		virtual error_code resume() = 0;
+		//		if (d->mUptream.size() == 0)
+		//		{
+		//			mSched->scheduleReady(*d);
+		//		}
+		//	}
+		//}
+
+		virtual error_code resume(Scheduler& sched) = 0;
 		virtual bool done() = 0;
 
 		virtual void* getValue() { return nullptr; };
@@ -80,8 +83,8 @@ namespace coproto
 	struct EndOfRoundAwaiter
 	{
 		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
-		ProtoBase* mParent;
-		EndOfRoundAwaiter(ProtoBase* parent)
+		ProtoPromise<T>* mParent;
+		EndOfRoundAwaiter(ProtoPromise<T>* parent)
 			:mParent(parent)
 		{}
 
@@ -123,7 +126,8 @@ namespace coproto
 		using value_type = typename internal::ResultWrapperHelper<T>::type;
 		using type = Proto<value_type>;
 
-		internal::Inline<ProtoBase> mBase;
+		internal::Inline<ProtoBase, inlineSize> mBase;
+
 
 		value_type mRes = Err(make_error_code(code::success));
 		std::exception_ptr mExPtr = nullptr;
@@ -131,38 +135,36 @@ namespace coproto
 		ResultWrapper() = delete;
 		ResultWrapper(const ResultWrapper&) = delete;
 
-		ResultWrapper(internal::Inline<ProtoBase>&& o)
+		ResultWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
 			: mBase(std::move(o))
 		{}
 
 		ResultWrapper(ResultWrapper&& o)
-			: ProtoBase(o.mSched),
-			mBase(std::move(o.mBase))
+			: mBase(std::move(o.mBase))
 		{
-			o.mSched = nullptr;
 		}
 
-		error_code resume() override {
-			mBase->mSched = mSched;
+		error_code resume(Scheduler& sched) override {
 
 
 			error_code ec;
 			if (!done())
 			{
-				ec = mBase->resume();
+				ec = mBase->resume(sched);
 				if (ec && ec != code::suspend)
 					setError(ec, mBase->getExpPtr());
 			}
 
 			if (ec == code::suspend)
 			{
-				mUptream.push_back(mBase.get());
-				mBase->mDownstream.push_back(this);
+				// schdeule this function to be resumed whenever
+				// mBase is completed.
+				sched.addDep(*this, *mBase.get());
 				return ec;
 			}
 
 			assert(done());
-			finalize({}, nullptr);
+			sched.fulfillDep(*this, {}, nullptr);
 			return {};
 		};
 
@@ -220,7 +222,7 @@ namespace coproto
 		// will return a T
 		struct Controller : public ProtoBase
 		{
-			internal::Inline<ProtoBase> mBase;
+			internal::Inline<ProtoBase, inlineSize> mBase;
 
 			enum class State
 			{
@@ -233,19 +235,15 @@ namespace coproto
 			std::exception_ptr mExPtr;
 
 
-			error_code resume() override
+			error_code resume(Scheduler& sched) override
 			{
-				assert(mSched);
-				mBase->mSched = mSched;
-
 				if (mState == State::Init)
 				{
-					auto ec = mBase->resume();
+					auto ec = mBase->resume(sched);
 					if (ec == code::suspend)
 					{
 						mState = State::InProgress;
-						mUptream.push_back(mBase.get());
-						mBase->mDownstream.push_back(this);
+						sched.addDep(*this, *mBase.get());
 					}
 					else
 					{
@@ -263,7 +261,8 @@ namespace coproto
 				{
 					assert(mBase->done());
 					mState = State::Done;
-					finalize(mEc, mExPtr);
+					sched.fulfillDep(*this, mEc, mExPtr);
+
 				}
 				return {};
 			}
@@ -313,29 +312,25 @@ namespace coproto
 
 		using Controller = typename Async<T>::Controller;
 
-		internal::Inline<ProtoBase> mBase;
+		internal::Inline<ProtoBase, inlineSize> mBase;
 		Async<T> mRet;
 
-		AsyncWrapper(internal::Inline<ProtoBase>&& o)
+		AsyncWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
 			: mBase(std::move(o))
 		{}
 
 		AsyncWrapper(AsyncWrapper&& o)
-			: ProtoBase(o.mSched),
-			mBase(std::move(o.mBase))
+			: mBase(std::move(o.mBase))
 		{
-			o.mSched = nullptr;
 		}
 
-		error_code resume() override
+		error_code resume(Scheduler& sched) override
 		{
 			assert(!done());
-			assert(mSched);
 			mRet.mBase.reset(new Controller);
 			auto ptr = (Controller*)mRet.mBase.get();
 			ptr->mBase = std::move(mBase);
-			ptr->mSched = mSched;
-			return ptr->resume();			
+			return ptr->resume(sched);			
 		}
 
 		bool done() override {
@@ -398,6 +393,7 @@ namespace coproto
 	{
 	public:
 		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
+		Scheduler* mSched = nullptr;
 		std::exception_ptr mExPtr;
 		error_code mEc;
 
@@ -432,9 +428,9 @@ namespace coproto
 		EndOfRoundAwaiter<T> await_transform(EndOfRound& p);
 		EndOfRoundAwaiter<T> await_transform(EndOfRound&& p);
 
-		error_code resume() override {
+		error_code resume(Scheduler& sched) override {
 
-
+			mSched = &sched;
 			if (!done())
 			{
 				mEc = {};
@@ -442,7 +438,10 @@ namespace coproto
 			}
 
 			if (done())
-				finalize(mEc, mExPtr);
+			{
+				mSched->fulfillDep(*this, mEc, mExPtr);
+				//finalize(mEc, mExPtr);
+			}
 
 			return mEc;
 		};
@@ -490,7 +489,7 @@ namespace coproto
 	public:
 		using promise_type = ProtoPromise<T>;
 		using coro_handle = std::coroutine_handle<promise_type>;
-		internal::Inline<ProtoBase> mBase;
+		internal::Inline<ProtoBase, inlineSize> mBase;
 
 		using value_type = T;
 
@@ -528,13 +527,13 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
-			proto.mSched = prom.mSched;
-			auto ec = proto.resume();
+			auto ec = proto.resume(*prom.mSched);
 
 			if (ec == code::suspend)
 			{
-				prom.mUptream.push_back(&proto);
-				proto.mDownstream.push_back(&prom);
+				prom.mSched->addDep(prom, proto);
+				//prom.mUptream.push_back(&proto);
+				//proto.mDownstream.push_back(&prom);
 				prom.mEc = ec;
 			}
 			else if (ec)
@@ -576,17 +575,16 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
-			proto.mSched = prom.mSched;
-
-
+			
 			if (proto.done())
 			{
 				return true;
 			}
 			else
 			{
-				prom.mUptream.push_back(&proto);
-				proto.mDownstream.push_back(&prom);
+				prom.mSched->addDep(prom, proto);
+				//prom.mUptream.push_back(&proto);
+				//proto.mDownstream.push_back(&prom);
 				return false;
 			}
 			
@@ -616,16 +614,8 @@ namespace coproto
 			u64 mIdx;
 			LocalScheduler* mSched;
 
-
-			std::list<ProtoBase*> mReady, mNext;
-
 			error_code recv(Buffer& data) override;
 			error_code send(Buffer& data) override;
-			void scheduleNext(ProtoBase& proto) override;
-			void scheduleReady(ProtoBase& proto) override;
-
-			void runOne();
-			bool done();
 		};
 
 		std::array<std::list<std::vector<u8>>, 2> mBuffs;

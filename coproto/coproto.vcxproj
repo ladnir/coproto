@@ -164,6 +164,7 @@
     <ClCompile Include="coproto.cpp" />
     <ClCompile Include="error_code.cpp" />
     <ClCompile Include="Proto.cpp" />
+    <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="TypeTraits.cpp" />
   </ItemGroup>

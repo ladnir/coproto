@@ -31,16 +31,17 @@ namespace coproto
 			return internal::tryResize(size, mContainer);
 		}
 
-		error_code resume() override {
-			assert(mSched);
-			mEc = mSched->recv(*this);
+		error_code resume(Scheduler& sched) override {
+			mEc = sched.recv(*this);
 
 			if (done())
-				finalize(mEc, nullptr);
+			{
+				sched.fulfillDep(*this, mEc, nullptr);
+			}
 
 			if (mEc == code::noMessageAvailable)
 			{
-				mSched->scheduleNext(*this);
+				sched.scheduleNext(*this);
 				return code::suspend;
 			}
 
@@ -89,15 +90,15 @@ namespace coproto
 				return code::noResizeSupport;
 		}
 
-		error_code resume() override {
-			assert(mSched);
-			mEc = mSched->recv(*this);
+		error_code resume(Scheduler& sched) override {
+			
+			mEc = sched.recv(*this);
 			if (done())
-				finalize(mEc, nullptr);
+				sched.fulfillDep(*this, mEc, nullptr);
 
 			if (mEc == code::noMessageAvailable)
 			{
-				mSched->scheduleNext(*this);
+				sched.scheduleNext(*this);
 				return code::suspend;
 			}
 
@@ -143,11 +144,10 @@ namespace coproto
 		}
 
 
-		error_code resume() override {
-			assert(mSched);
-			mEc = mSched->send(*this);
+		error_code resume(Scheduler& sched) override {
+			mEc = sched.send(*this);
 			if (done())
-				finalize(mEc, nullptr);
+				sched.fulfillDep(*this, mEc, nullptr);
 
 			return mEc;
 		}
@@ -191,11 +191,11 @@ namespace coproto
 			return internal::tryResize(size, mContainer);
 		}
 
-		error_code resume() override {
-			assert(mSched);
-			mEc = mSched->send(*this);
+		error_code resume(Scheduler& sched) override {
+			
+			mEc = sched.send(*this);
 			if (done())
-				finalize(mEc, nullptr);
+				sched.fulfillDep(*this, mEc, nullptr);
 
 			return mEc;
 		}
@@ -266,60 +266,6 @@ namespace coproto
 	}
 
 
-	void coproto::LocalScheduler::Sched::runOne()
-	{
-		while (mReady.size())
-		{
-			auto task = mReady.front();
-			mReady.pop_front();
-
-			auto ec = task->resume();
-
-			//if (ec && mReady.size() > 1)
-			//{
-			//	//auto& child = frame.mProto->mHandle.get().promise();
-			//	auto& parent = *mStack[mStack.size() - 2];
-
-			//	parent.setError(ec, std::move(frame.getExpPtr()));
-
-			//	//if (awaiter.mReturnErrors == false)
-			//	//{
-			//	//	auto& parent = mStack[mStack.size() - 2].mProto->mHandle.get().promise();
-			//	//	parent.mExPtr = std::move(child.mExPtr);
-			//	//	parent.setError(child.mEc);
-			//	//}
-			//}
-
-			//mStack.pop_back();
-
-			//if (!ec || ec != code::suspend)
-			//{
-			//	if (mStack.size() > 1 &&
-			//		ec)
-			//	{
-
-			//	}
-
-
-			//	if (mStack.size())
-			//	{
-			//		runOne();
-			//	}
-			//}
-
-
-		}
-		std::swap(mReady, mNext);
-	}
-
-	bool coproto::LocalScheduler::Sched::done()
-	{
-		return mReady.size() == 0;
-	}
-
-
-
-
 	error_code LocalScheduler::Sched::recv(Buffer& buff)
 	{
 		error_code ec;
@@ -354,23 +300,6 @@ namespace coproto
 		mSched->mBuffs[mIdx ^ 1].emplace_back(data.begin(), data.end());
 		return {};
 	}
-
-	void LocalScheduler::Sched::scheduleNext(ProtoBase& proto)
-	{
-		mNext.push_back(&proto);
-
-		assert(proto.mSched == nullptr || proto.mSched == this);
-		proto.mSched = this;
-	}
-
-	void LocalScheduler::Sched::scheduleReady(ProtoBase& proto)
-	{
-		mReady.push_back(&proto);
-
-		assert(proto.mSched == nullptr || proto.mSched == this);
-		proto.mSched = this;
-	}
-
 
 	namespace tests
 	{
