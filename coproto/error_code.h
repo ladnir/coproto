@@ -26,6 +26,8 @@ namespace coproto
 		noResizeSupport,
 		// The protocol has been suspended for some reason.
 		suspend,
+
+		//endOfRoundFlag,
 		// sending a zero length message is not allowed.
 		sendLengthZeroMsg,
 		// One of the other parties was caught cheating

@@ -9,6 +9,7 @@
 #include <optional>
 #include <iostream>
 #include "Result.h"
+#include <sstream>
 //#define USE_INLINE
 
 namespace coproto
@@ -38,40 +39,25 @@ namespace coproto
 		ProtoBase(const ProtoBase&) = default;
 		ProtoBase(ProtoBase&&) = default;
 
-		//ProtoBase(Scheduler* s)
-		//	:mSched(s)
-		//{}
+
+		std::string mName;
+		void setName(std::string name)
+		{
+			mName = name;
+		}
+
+		virtual std::string getName()
+		{
+			if (mName.size() == 0)
+			{
+				mName = "unknown_" + hexPtr(this);
+			}
+			return mName;
+		}
 
 		virtual ~ProtoBase() {}
-
-		//Scheduler* mSched = nullptr;
-		//std::vector<ProtoBase*> mDownstream;
-		//std::vector<ProtoBase*> mUptream;
-
-		//void finalize(error_code ec, std::exception_ptr p)
-		//{
-		//	assert(mUptream.size() == 0);
-		//	if (ec) {
-		//		for (auto d : mDownstream) {
-		//			d->setError(ec, p);
-		//		}
-		//	}
-		//	for (auto d : mDownstream) {
-		//		auto iter = std::find(d->mUptream.begin(), d->mUptream.end(), this);
-		//		assert(iter != d->mUptream.end());
-		//		std::swap(*iter, d->mUptream.back());
-		//		d->mUptream.pop_back();
-
-		//		if (d->mUptream.size() == 0)
-		//		{
-		//			mSched->scheduleReady(*d);
-		//		}
-		//	}
-		//}
-
 		virtual error_code resume(Scheduler& sched) = 0;
 		virtual bool done() = 0;
-
 		virtual void* getValue() { return nullptr; };
 		virtual void setError(error_code e, std::exception_ptr p) = 0;
 		virtual std::exception_ptr getExpPtr() = 0;
@@ -90,6 +76,9 @@ namespace coproto
 
 		bool await_ready()
 		{
+
+			//mParent->mSched->setEndOfRound();
+			//return true;
 			mParent->setError(code::suspend, nullptr);
 			mParent->mSched->scheduleNext(*mParent);
 			return false;
@@ -99,6 +88,15 @@ namespace coproto
 		void await_resume()
 		{
 		}
+	};
+
+	struct Name
+	{
+		Name(std::string n)
+			:mName(n)
+		{}
+
+		std::string mName;
 	};
 
 
@@ -167,6 +165,11 @@ namespace coproto
 			sched.fulfillDep(*this, {}, nullptr);
 			return {};
 		};
+
+		std::string getName() override
+		{
+			return mBase->getName() + "_wrap";
+		}
 
 		void* getValue() override
 		{
@@ -271,6 +274,13 @@ namespace coproto
 				return mState == State::Done;
 			};
 
+
+			std::string getName() override
+			{
+				return mBase->getName() + "_join";
+			}
+
+
 			void* getValue() override { return mBase->getValue(); };
 			void setError(error_code e, std::exception_ptr p)override {
 				mEc = e;
@@ -329,8 +339,12 @@ namespace coproto
 			assert(!done());
 			mRet.mBase.reset(new Controller);
 			auto ptr = (Controller*)mRet.mBase.get();
+			sched.log(getName() + " -> " + mBase->getName() + "[style=dashed];");
+
 			ptr->mBase = std::move(mBase);
-			return ptr->resume(sched);			
+
+
+			return ptr->resume(sched);
 		}
 
 		bool done() override {
@@ -343,6 +357,11 @@ namespace coproto
 			//mEc = e;
 			//mExPtr = std::move(p);
 		}
+		std::string getName() override
+		{
+			return mBase->getName() + "_async";
+		}
+
 		std::exception_ptr getExpPtr() override {
 			assert(0); //return mExPtr;
 			std::terminate();
@@ -366,7 +385,7 @@ namespace coproto
 	};
 
 	template<typename T>
-	struct ReturnStorage 
+	struct ReturnStorage
 	{
 		static_assert(std::is_void_v<T> == false, "");
 		std::optional<T> mVal;
@@ -396,8 +415,12 @@ namespace coproto
 		Scheduler* mSched = nullptr;
 		std::exception_ptr mExPtr;
 		error_code mEc;
-
-		ProtoPromise() { }
+		u64 mResumeIdx = 0;
+		u64 mProtoIdx = 0;
+		ProtoPromise() {
+			mProtoIdx = gProtoIdx++;
+			setName("Proto_" + std::to_string(mProtoIdx));
+		}
 		~ProtoPromise() { }
 
 		coro_handle getHandle()
@@ -428,20 +451,51 @@ namespace coproto
 		EndOfRoundAwaiter<T> await_transform(EndOfRound& p);
 		EndOfRoundAwaiter<T> await_transform(EndOfRound&& p);
 
+		std::suspend_never await_transform(const Name& name)
+		{
+			setName(name.mName);
+			return std::suspend_never{};
+		}
+
 		error_code resume(Scheduler& sched) override {
 
 			mSched = &sched;
+
 			if (!done())
 			{
+				//auto n0 = getName();
+				//auto n1 = getName();
+				//if(mResumeIdx)
+				//	sched.log(n0 + " -> " + n1);
+
+
 				mEc = {};
 				getHandle().resume();
+
+
 			}
 
 			if (done())
 			{
+
 				mSched->fulfillDep(*this, mEc, mExPtr);
-				//finalize(mEc, mExPtr);
+
+				std::stringstream ss;
+				ss << "    subgraph cluster_" << std::to_string(mProtoIdx) << " { \n"
+					<< "        style = filled;\n"
+					<< "        color = lightgrey;\n"
+					<< "        node[style = filled, color = white];\n"
+					<< "        label = \"" << mName << "\";\n"
+					<< "        " << mName << "_" << 0;
+
+				for(u64 i = 1; i <= mResumeIdx; ++i)
+					ss << " -> " << mName << "_" << i;				
+				ss << "[style=invis];\n    }";
+
+				mSched->log(ss.str());
 			}
+			else
+				++mResumeIdx;
 
 			return mEc;
 		};
@@ -460,7 +514,14 @@ namespace coproto
 
 			return hasError() || getHandle().done();
 		}
-
+		std::string getName() override
+		{
+			if (mName.size() == 0)
+			{
+				mName = "unknown_" + hexPtr(this);
+			}
+			return mName + "_" + std::to_string(mResumeIdx);
+		}
 
 		void setError(error_code ec, std::exception_ptr p) override {
 			assert(!hasError());
@@ -506,6 +567,11 @@ namespace coproto
 			r.mBase.setOwned(new AsyncWrapper<T>(std::move(mBase)));
 			return r;
 		}
+
+		void setName(std::string name)
+		{
+			mBase->setName(name);
+		}
 	};
 
 
@@ -527,6 +593,10 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
+			auto promName = prom.getName();
+			auto protoName = proto.getName();
+			prom.mSched->log(promName + " -> " + protoName + ";");
+
 			auto ec = proto.resume(*prom.mSched);
 
 			if (ec == code::suspend)
@@ -536,9 +606,11 @@ namespace coproto
 				//proto.mDownstream.push_back(&prom);
 				prom.mEc = ec;
 			}
-			else if (ec)
-			{
-				prom.mEc = ec;
+			else {
+				if (ec)
+					prom.mEc = ec;
+
+				prom.mSched->log(protoName + " -> " + promName + ";");
 			}
 			return !ec;
 		}
@@ -575,9 +647,13 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
-			
+
+			prom.mSched->log(prom.getName() + " -> " + proto.getName());
+
 			if (proto.done())
 			{
+				prom.mSched->log(proto.getName() + " -> " + prom.getName());
+
 				return true;
 			}
 			else
@@ -587,7 +663,7 @@ namespace coproto
 				//proto.mDownstream.push_back(&prom);
 				return false;
 			}
-			
+
 		}
 		void await_suspend(coro_handle h) { }
 
@@ -624,6 +700,13 @@ namespace coproto
 		template<typename T>
 		error_code execute(Proto<T>& p0, Proto<T>& p1)
 		{
+			if (p0.mBase->mName.size() == 0)
+				p0.mBase->setName("main");
+			if (p1.mBase->mName.size() == 0)
+				p1.mBase->setName("main");
+
+			//mScheds[0].mPrint = true;
+
 			bool v = false;
 			mScheds[0].mIdx = 0;
 			mScheds[0].mSched = this;
@@ -667,6 +750,9 @@ namespace coproto
 					}
 				}
 			}
+
+			std::cout << mScheds[0].getDot() << std::endl;
+			std::cout << mScheds[1].getDot() << std::endl;
 
 			return {};
 		}

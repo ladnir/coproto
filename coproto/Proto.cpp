@@ -19,7 +19,9 @@ namespace coproto
 		error_code mEc = code::noMessageAvailable;
 
 		RecvBuff()
-		{}
+		{
+				setName("recv_" + std::to_string(gProtoIdx++));
+		}
 
 		span<u8> asSpan() override
 		{
@@ -75,7 +77,9 @@ namespace coproto
 
 		RefRecvBuff(Container& t)
 			:mContainer(t)
-		{}
+		{
+			setName("recv_" + std::to_string(gProtoIdx++));
+		}
 
 		span<u8> asSpan() override
 		{
@@ -91,10 +95,12 @@ namespace coproto
 		}
 
 		error_code resume(Scheduler& sched) override {
-			
+
 			mEc = sched.recv(*this);
 			if (done())
+			{
 				sched.fulfillDep(*this, mEc, nullptr);
+			}
 
 			if (mEc == code::noMessageAvailable)
 			{
@@ -131,7 +137,9 @@ namespace coproto
 
 		RefSendBuff(Container& t)
 			:mContainer(t)
-		{}
+		{
+			setName("send_" + std::to_string(gProtoIdx++));
+		}
 
 		span<u8> asSpan() override
 		{
@@ -147,7 +155,9 @@ namespace coproto
 		error_code resume(Scheduler& sched) override {
 			mEc = sched.send(*this);
 			if (done())
+			{
 				sched.fulfillDep(*this, mEc, nullptr);
+			}
 
 			return mEc;
 		}
@@ -179,7 +189,10 @@ namespace coproto
 
 		MvSendBuff(Container&& t)
 			:mContainer(std::move(t))
-		{}
+		{
+			setName("send_" + std::to_string(gProtoIdx++));
+
+		}
 
 		span<u8> asSpan() override
 		{
@@ -192,10 +205,12 @@ namespace coproto
 		}
 
 		error_code resume(Scheduler& sched) override {
-			
+
 			mEc = sched.send(*this);
 			if (done())
+			{
 				sched.fulfillDep(*this, mEc, nullptr);
+			}
 
 			return mEc;
 		}
@@ -341,6 +356,9 @@ namespace coproto
 			auto p1 = proto(1);
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
+			std::cout << sched.mScheds[0].getDot() << std::endl;
+			//std::cout << sched.mScheds[1].getDot() << std::endl;
+
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
@@ -350,6 +368,7 @@ namespace coproto
 		{
 			auto proto = [](bool party) -> Proto<> {
 				std::string str("hello from 0");
+				//co_await Name("main");
 
 				for (u64 i = 0; i < 5; ++i)
 				{
@@ -394,6 +413,7 @@ namespace coproto
 			auto p1 = proto(1);
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
+
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
@@ -596,7 +616,7 @@ namespace coproto
 
 			if (i)
 			{
-				echoServer(i - 1);
+				co_await echoServer(i - 1);
 			}
 		}
 		Proto<> echoClient(u64 i, u64 length = 10, std::string name = "p0", bool v = false)
@@ -624,7 +644,7 @@ namespace coproto
 
 			if (i)
 			{
-				echoClient(i - 1);
+				co_await echoClient(i - 1);
 			}
 		}
 
@@ -641,7 +661,7 @@ namespace coproto
 					if (ec)
 						throw std::runtime_error(LOCATION);
 
-					co_await echoServer(n);
+					co_await echoServer(n, 10, "p1", true);
 				}
 				else
 				{
@@ -652,7 +672,7 @@ namespace coproto
 					if (str != "hello from 0")
 						throw std::runtime_error(LOCATION);
 
-					co_await echoClient(n);
+					co_await echoClient(n, 10, "p0", true);
 					//std::cout << " p0 sent" << std::endl;
 
 				}

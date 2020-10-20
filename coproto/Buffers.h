@@ -11,6 +11,11 @@ namespace coproto
 	std::string hexPtr(void* p);
 	namespace internal
 	{
+		//class InlineAllocator
+		//{
+		//	span<u8> mData;
+		//};
+
 
 		template<typename Interface, int StorageSize /* makes the whole thing 256 bytes */>
 		class Inline
@@ -124,6 +129,24 @@ namespace coproto
 				new (ptr) ModelController<U>(std::forward<Args>(args)...);
 				mData = &(ptr->mU);
 			}
+
+			//template<typename U, typename... Args >
+			//typename std::enable_if<
+			//	(sizeof(ModelController<U>) > sizeof(Storage)) &&
+			//	std::is_base_of<Interface, U>::value&&
+			//	std::is_constructible<U, const InlineAllocator&, Args...>::value
+			//		>::type
+			//	emplace(Args&& ... args)
+			//{
+			//	destruct();
+
+			//	if(sizeof())
+
+			//	// this object is too big, use the allocator. Local storage
+			//	// will be unused as denoted by (isSBO() == false).
+			//	mData = new U(std::forward<Args>(args)...);
+			//	isOwning() = true;
+			//}
 
 			template<typename U, typename... Args >
 			typename std::enable_if<

@@ -1,17 +1,20 @@
 #include "Scheduler.h"
 #include "Proto.h"
+#include <sstream>
 
 namespace coproto
 {
-
+	std::atomic<u64> gProtoIdx(0);
 	void Scheduler::runOne()
 	{
-
+		ProtoBase* task = nullptr;
 		while (mReady.size())
 		{
-			auto task = mReady.front();
+			task = mReady.front();
+
 			mReady.pop_front();
 
+			//log("resume " + task->getName() + ";");
 			auto ec = task->resume(*this);
 
 		}
@@ -28,6 +31,10 @@ namespace coproto
 
 	void Scheduler::scheduleNext(ProtoBase& proto)
 	{
+
+		auto name = proto.getName();
+		log(name + "[shape=Mdiamond];");
+
 		mNext.push_back(&proto);
 
 	}
@@ -70,6 +77,7 @@ namespace coproto
 		if (dIter == mDwstream.end())
 			return;
 
+		// for each downstream proto
 		for (auto d : dIter->second)
 		{
 			auto uIter = mUpstream.find(d);
@@ -89,6 +97,8 @@ namespace coproto
 			if(ec)
 				uIter->first->setError(ec, ptr);
 
+			log(upstream.getName() + " -> " + d->getName() + ";");
+
 			if (uIter->second.size() == 0)
 			{
 				mUpstream.erase(uIter);
@@ -97,6 +107,26 @@ namespace coproto
 		}
 
 		mDwstream.erase(dIter);
+	}
+
+	void Scheduler::setEndOfRound()
+	{
+	}
+
+	std::string Scheduler::getDot() const
+	{
+		std::stringstream ss;
+		
+		ss << "digraph G {\n   rankdir = TD;\n start -> ";
+
+		for (auto l : mLogs)
+			ss << l << std::endl;
+
+		ss << "}\n";
+
+		//std::cout << ss.str() << std::endl;
+
+		return ss.str();
 	}
 
 }

@@ -153,6 +153,7 @@
     <ClInclude Include="coproto.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="error_code.h" />
+    <ClInclude Include="InlineStorage.h" />
     <ClInclude Include="Result.h" />
     <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Proto.h" />
@@ -163,6 +164,7 @@
     <ClCompile Include="Buffers.cpp" />
     <ClCompile Include="coproto.cpp" />
     <ClCompile Include="error_code.cpp" />
+    <ClCompile Include="InlineStorage.cpp" />
     <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="Tests.cpp" />

@@ -9,6 +9,8 @@ namespace coproto
 {
 	//struct ProtoAwaiter;
 	//struct EcProtoAwaiter;
+	extern std::atomic<u64> gProtoIdx;
+
 	class ProtoBase;
 	class Scheduler
 	{
@@ -17,6 +19,18 @@ namespace coproto
 		std::list<ProtoBase*> mReady, mNext;
 
 		std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
+
+		bool mPrint = false;
+		u64 mIdx = 0;
+		std::vector<std::string> mLogs;
+		void log(std::string l)
+		{
+			if (mPrint)
+				std::cout << l << std::endl;
+			mLogs.push_back(l);
+		}
+
+		bool mEndOfRoundFlag = false;
 
 		void runOne();
 		bool done();
@@ -33,5 +47,12 @@ namespace coproto
 		void addDep(ProtoBase& downstream, ProtoBase& upstream);
 
 		void fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr);
+
+		void setEndOfRound();
+
+
+		//std::unordered_map
+
+		std::string getDot()const;
 	};
 }
