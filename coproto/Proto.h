@@ -355,7 +355,7 @@ namespace coproto
 		}
 		~AsyncWrapper()
 		{
-			std::cout << "~AsyncWrapper " << hexPtr(this) << std::endl;
+			//std::cout << "~AsyncWrapper " << hexPtr(this) << std::endl;
 		}
 
 		error_code resume_(Scheduler& sched) override
@@ -714,7 +714,8 @@ namespace coproto
 
 			mScheds[0].scheduleReady(*p0.mBase.get());
 			mScheds[1].scheduleReady(*p1.mBase.get());
-
+			mScheds[0].mRoundIdx = 0;
+			mScheds[1].mRoundIdx = 0;
 			while (
 				mScheds[0].done() == false ||
 				mScheds[1].done() == false)
@@ -750,8 +751,8 @@ namespace coproto
 				}
 			}
 
-			std::cout << mScheds[0].getDot() << std::endl;
-			std::cout << mScheds[1].getDot() << std::endl;
+			//std::cout << mScheds[0].getDot() << std::endl;
+			//std::cout << mScheds[1].getDot() << std::endl;
 
 			return {};
 		}
@@ -778,6 +779,8 @@ namespace coproto
 		void nestedProtocolErrorCodeTest();
 		void asyncProtocolTest();
 		void asyncThrowProtocolTest();
+
+		void endOfRoundTest();
 	}
 
 	template<typename T>

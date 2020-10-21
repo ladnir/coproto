@@ -356,9 +356,13 @@ namespace coproto
 			auto p1 = proto(1);
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
-			std::cout << sched.mScheds[0].getDot() << std::endl;
+			//std::cout << sched.mScheds[0].getDot() << std::endl;
 			//std::cout << sched.mScheds[1].getDot() << std::endl;
 
+			if (sched.mScheds[0].numRounds() != 6)
+				throw std::runtime_error("num round");
+			if (sched.mScheds[1].numRounds() != 6)
+				throw std::runtime_error("num round");
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
@@ -480,6 +484,7 @@ namespace coproto
 			auto p1 = proto(1);
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
+
 			if (ec)
 				throw std::runtime_error(ec.message());
 		}
@@ -662,7 +667,7 @@ namespace coproto
 					if (ec)
 						throw std::runtime_error(LOCATION);
 
-					co_await echoServer(n, 10, "p1", true);
+					co_await echoServer(n, 10, "p1", false);
 				}
 				else
 				{
@@ -673,7 +678,7 @@ namespace coproto
 					if (str != "hello from 0")
 						throw std::runtime_error(LOCATION);
 
-					co_await echoClient(n, 10, "p0", true);
+					co_await echoClient(n, 10, "p0", false);
 					//std::cout << " p0 sent" << std::endl;
 
 				}
@@ -780,12 +785,12 @@ namespace coproto
 					std::vector<u64> buff(10);
 					//co_await send(buff);
 
-					auto fu0 = co_await echoServer(n, 5, name, true).async();
+					auto fu0 = co_await echoServer(n, 5, name, false).async();
 					auto fu1 = co_await echoServer(n + 2, 6, name).async();
 					auto fu2 = co_await echoServer(n, 7, name).async();
 					auto fu3 = co_await echoServer(n + 7, 8, name).async();
 					auto fu4 = co_await echoServer(n, 9, name).async();
-					co_await echoClient(n, 10, name, true);
+					co_await echoClient(n, 10, name, false);
 					//co_await send(buff);
 
 					co_await fu0;
@@ -800,12 +805,12 @@ namespace coproto
 					co_await Name(name);
 					std::vector<u64> buff(10);
 					//co_await recv(buff);
-					auto fu0 = co_await echoClient(n, 5, name, true).async();
+					auto fu0 = co_await echoClient(n, 5, name, false).async();
 					auto fu1 = co_await echoClient(n + 2, 6, name).async();
 					auto fu2 = co_await echoClient(n, 7, name).async();
 					auto fu3 = co_await echoClient(n + 7, 8, name).async();
 					auto fu4 = co_await echoClient(n, 9, name).async();
-					co_await echoServer(n, 10, name, true);
+					co_await echoServer(n, 10, name, false);
 					//co_await recv(buff);
 
 					co_await fu0;
@@ -821,8 +826,13 @@ namespace coproto
 			auto ec = sched.execute(p0, p1);
 
 
-			std::cout << sched.mScheds[0].getDot() << std::endl;
-			std::cout << sched.mScheds[1].getDot() << std::endl;
+			//std::cout << sched.mScheds[0].getDot() << std::endl;
+			//std::cout << sched.mScheds[1].getDot() << std::endl;
+
+			if (sched.mScheds[0].numRounds() != n + 1 + 8)
+				throw std::runtime_error("num round");
+			if (sched.mScheds[1].numRounds() != n + 1 + 7)
+				throw std::runtime_error("num round");
 
 			if (ec)
 				throw std::runtime_error(ec.message());
@@ -861,5 +871,46 @@ namespace coproto
 				throw std::runtime_error("");
 		}
 
+
+		void endOfRoundTest()
+		{
+
+			auto recvProto = [&]() -> Proto<> {
+				std::vector<u8> msg;
+				co_await recv(msg);
+				co_await EndOfRound();
+				co_await send(msg);
+			};
+			auto sendProto = [&]() -> Proto<> {
+				std::vector<u8> msg(10);
+				co_await send(msg);
+				co_await EndOfRound();
+				co_await recv(msg);
+			};
+
+			auto recvProto2 = [&]() -> Proto<> {
+				std::vector<u8> msg(10);
+				co_await recvProto();
+				co_await send(msg);
+			};
+			auto sendProto2 = [&]() -> Proto<> {
+				std::vector<u8> msg;
+				co_await sendProto();
+				co_await recv(msg);
+			};
+
+			auto p0 = sendProto2();
+			auto p1 = recvProto2();
+			LocalScheduler sched;
+			auto ec = sched.execute(p0, p1);
+
+
+			if (sched.mScheds[0].numRounds() != 2)
+				throw std::runtime_error("num round");
+			if (sched.mScheds[1].numRounds() != 1)
+				throw std::runtime_error("num round");
+			if (ec)
+				throw std::runtime_error(ec.message());
+		}
 	}
 }

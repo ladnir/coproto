@@ -38,6 +38,7 @@ namespace coproto
 
 		error_code resume(ProtoBase* proto);
 
+		u64 mRoundIdx = 0;
 		bool mPrint = false;
 
 		struct Entry
@@ -125,7 +126,10 @@ namespace coproto
 
 
 		//std::unordered_map
-
+		u64 numRounds()
+		{
+			return mRoundIdx;
+		}
 		std::string getDot()const;
 	};
 }

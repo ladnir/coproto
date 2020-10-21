@@ -5,13 +5,7 @@
 namespace coproto
 {
 	std::atomic<u64> gProtoIdx(0);
-	error_code Scheduler::resume(ProtoBase* proto)
-	{
-		mStack.push_back(proto);
-		auto ec = proto->resume_(*this);
-		mStack.pop_back();
-		return ec;
-	}
+
 	void Scheduler::logEdge(ProtoBase& parent, ProtoBase& child, bool dashed)
 	{
 		logEdge(parent.getName(), child.getName());
@@ -64,6 +58,14 @@ namespace coproto
 	{
 		mLogs.emplace_back(Entry::Suspend, p.getName());
 
+	}	
+	
+	error_code Scheduler::resume(ProtoBase* proto)
+	{
+		mStack.push_back(proto);
+		auto ec = proto->resume_(*this);
+		mStack.pop_back();
+		return ec;
 	}
 	void Scheduler::runOne()
 	{
@@ -76,6 +78,7 @@ namespace coproto
 		}
 		std::swap(mReady, mNext);
 		mEoRSet.clear();
+		++mRoundIdx;
 	}
 
 	bool Scheduler::done()
