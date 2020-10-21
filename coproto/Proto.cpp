@@ -33,7 +33,7 @@ namespace coproto
 			return internal::tryResize(size, mContainer);
 		}
 
-		error_code resume(Scheduler& sched) override {
+		error_code resume_(Scheduler& sched) override {
 			mEc = sched.recv(*this);
 
 			if (done())
@@ -94,7 +94,7 @@ namespace coproto
 				return code::noResizeSupport;
 		}
 
-		error_code resume(Scheduler& sched) override {
+		error_code resume_(Scheduler& sched) override {
 
 			mEc = sched.recv(*this);
 			if (done())
@@ -152,7 +152,7 @@ namespace coproto
 		}
 
 
-		error_code resume(Scheduler& sched) override {
+		error_code resume_(Scheduler& sched) override {
 			mEc = sched.send(*this);
 			if (done())
 			{
@@ -204,7 +204,7 @@ namespace coproto
 			return internal::tryResize(size, mContainer);
 		}
 
-		error_code resume(Scheduler& sched) override {
+		error_code resume_(Scheduler& sched) override {
 
 			mEc = sched.send(*this);
 			if (done())
@@ -281,7 +281,7 @@ namespace coproto
 	}
 
 
-	error_code LocalScheduler::Sched::recv(Buffer& buff)
+	error_code LocalScheduler::Sock::recv(Buffer& buff)
 	{
 		error_code ec;
 		if (mSched->mBuffs[mIdx].size())
@@ -305,7 +305,7 @@ namespace coproto
 		return ec;
 	}
 
-	error_code LocalScheduler::Sched::send(Buffer& buff)
+	error_code LocalScheduler::Sock::send(Buffer& buff)
 	{
 
 		auto data = buff.asSpan();
@@ -591,7 +591,7 @@ namespace coproto
 
 		Proto<> echoServer(u64 i, u64 length = 10, std::string name = "p1", bool v = false)
 		{
-
+			co_await Name(name + "_server_" + std::to_string(i) + "_" + std::to_string(length));
 			auto exp = std::vector<char>(length);
 			std::iota(exp.begin(), exp.end(), 0);
 
@@ -621,6 +621,7 @@ namespace coproto
 		}
 		Proto<> echoClient(u64 i, u64 length = 10, std::string name = "p0", bool v = false)
 		{
+			co_await Name(name + "_client_" + std::to_string(i) + "_" + std::to_string(length));
 			if (v)
 				std::cout << name << " ec start " << i << " " << length << std::endl;
 
@@ -769,21 +770,22 @@ namespace coproto
 
 		void asyncProtocolTest()
 		{
-			u64 n = 4;
+			u64 n = 1;
 			auto proto = [n](bool party) -> Proto<> {
 
 				if (party)
 				{
 					auto name = std::string("p1");
+					co_await Name(name);
 					std::vector<u64> buff(10);
 					//co_await send(buff);
 
-					auto fu0 = co_await echoServer(n, 5, name).async();
+					auto fu0 = co_await echoServer(n, 5, name, true).async();
 					auto fu1 = co_await echoServer(n + 2, 6, name).async();
 					auto fu2 = co_await echoServer(n, 7, name).async();
 					auto fu3 = co_await echoServer(n + 7, 8, name).async();
 					auto fu4 = co_await echoServer(n, 9, name).async();
-					co_await echoClient(n, 10, name);
+					co_await echoClient(n, 10, name, true);
 					//co_await send(buff);
 
 					co_await fu0;
@@ -795,14 +797,15 @@ namespace coproto
 				else
 				{
 					auto name = std::string("p0");
+					co_await Name(name);
 					std::vector<u64> buff(10);
 					//co_await recv(buff);
-					auto fu0 = co_await echoClient(n, 5, name).async();
+					auto fu0 = co_await echoClient(n, 5, name, true).async();
 					auto fu1 = co_await echoClient(n + 2, 6, name).async();
 					auto fu2 = co_await echoClient(n, 7, name).async();
 					auto fu3 = co_await echoClient(n + 7, 8, name).async();
 					auto fu4 = co_await echoClient(n, 9, name).async();
-					co_await echoServer(n, 10, name);
+					co_await echoServer(n, 10, name, true);
 					//co_await recv(buff);
 
 					co_await fu0;
@@ -816,8 +819,13 @@ namespace coproto
 			auto p1 = proto(1);
 			LocalScheduler sched;
 			auto ec = sched.execute(p0, p1);
+
+
+			std::cout << sched.mScheds[0].getDot() << std::endl;
+			std::cout << sched.mScheds[1].getDot() << std::endl;
+
 			if (ec)
-				throw std::runtime_error("");
+				throw std::runtime_error(ec.message());
 		}
 
 		void asyncThrowProtocolTest()

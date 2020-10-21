@@ -56,7 +56,7 @@ namespace coproto
 		}
 
 		virtual ~ProtoBase() {}
-		virtual error_code resume(Scheduler& sched) = 0;
+		virtual error_code resume_(Scheduler& sched) = 0;
 		virtual bool done() = 0;
 		virtual void* getValue() { return nullptr; };
 		virtual void setError(error_code e, std::exception_ptr p) = 0;
@@ -77,11 +77,11 @@ namespace coproto
 		bool await_ready()
 		{
 
-			//mParent->mSched->setEndOfRound();
-			//return true;
-			mParent->setError(code::suspend, nullptr);
-			mParent->mSched->scheduleNext(*mParent);
-			return false;
+			mParent->mSched->setEndOfRound();
+			return true;
+			//mParent->setError(code::suspend, nullptr);
+			//mParent->mSched->scheduleNext(*mParent);
+			//return false;
 		}
 		void await_suspend(coro_handle h) { }
 
@@ -126,6 +126,13 @@ namespace coproto
 
 		internal::Inline<ProtoBase, inlineSize> mBase;
 
+		enum class Status
+		{
+			Init,
+			InProgress,
+			Done
+		};
+		Status mStatus = Status::Init;
 
 		value_type mRes = Err(make_error_code(code::success));
 		std::exception_ptr mExPtr = nullptr;
@@ -142,27 +149,30 @@ namespace coproto
 		{
 		}
 
-		error_code resume(Scheduler& sched) override {
-
+		error_code resume_(Scheduler& sched) override {
 
 			error_code ec;
-			if (!done())
+			if (mStatus == Status::Init)
 			{
-				ec = mBase->resume(sched);
-				if (ec && ec != code::suspend)
-					setError(ec, mBase->getExpPtr());
-			}
+				mStatus = Status::InProgress;
+				assert(mBase->done() == false);
 
-			if (ec == code::suspend)
-			{
-				// schdeule this function to be resumed whenever
-				// mBase is completed.
 				sched.addDep(*this, *mBase.get());
-				return ec;
+
+				ec = sched.resume(mBase.get());
+				if (ec == code::suspend)
+					return ec;
 			}
 
-			assert(done());
-			sched.fulfillDep(*this, {}, nullptr);
+			if (mStatus == Status::InProgress)
+			{
+				mStatus = Status::Done;
+				assert(mBase->done());
+				sched.fulfillDep(*this, {}, nullptr);
+			}
+			else
+				assert(0 && LOCATION);
+
 			return {};
 		};
 
@@ -188,7 +198,7 @@ namespace coproto
 		}
 
 		bool done() override {
-			return mBase.get()->done();
+			return mStatus == Status::Done;
 		}
 
 		void setError(error_code ec, std::exception_ptr p) override {
@@ -227,30 +237,30 @@ namespace coproto
 		{
 			internal::Inline<ProtoBase, inlineSize> mBase;
 
-			enum class State
+			enum class Status
 			{
 				Init,
 				InProgress,
 				Done
 			};
-			State mState = State::Init;
+			Status mStatus = Status::Init;
 			error_code mEc;
 			std::exception_ptr mExPtr;
 
 
-			error_code resume(Scheduler& sched) override
+			error_code resume_(Scheduler& sched) override
 			{
-				if (mState == State::Init)
+				if (mStatus == Status::Init)
 				{
-					auto ec = mBase->resume(sched);
+					auto ec = sched.resume(mBase.get());
 					if (ec == code::suspend)
 					{
-						mState = State::InProgress;
+						mStatus = Status::InProgress;
 						sched.addDep(*this, *mBase.get());
 					}
 					else
 					{
-						mState = State::Done;
+						mStatus = Status::Done;
 						assert(mBase->done());
 
 						if (ec)
@@ -260,10 +270,10 @@ namespace coproto
 
 					}
 				}
-				else if (mState == State::InProgress)
+				else if (mStatus == Status::InProgress)
 				{
 					assert(mBase->done());
-					mState = State::Done;
+					mStatus = Status::Done;
 					sched.fulfillDep(*this, mEc, mExPtr);
 
 				}
@@ -271,7 +281,7 @@ namespace coproto
 			}
 
 			bool done() override {
-				return mState == State::Done;
+				return mStatus == Status::Done;
 			};
 
 
@@ -306,7 +316,7 @@ namespace coproto
 
 		~Async()
 		{
-			if (mBase && mBase->mState == Controller::State::InProgress)
+			if (mBase && mBase->mStatus == Controller::Status::InProgress)
 			{
 				assert(0 && "the caller must join the async operation before the Async is destroyed.");
 				std::terminate();
@@ -325,30 +335,50 @@ namespace coproto
 		internal::Inline<ProtoBase, inlineSize> mBase;
 		Async<T> mRet;
 
+		enum class Status
+		{
+			Init,
+			Done
+		};
+		Status mStatus = Status::Init;
+
 		AsyncWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
 			: mBase(std::move(o))
-		{}
+		{
+			mName = mBase->getName() + "_async";
+		}
 
 		AsyncWrapper(AsyncWrapper&& o)
 			: mBase(std::move(o.mBase))
+			, mName(std::move(o.mName))
 		{
 		}
-
-		error_code resume(Scheduler& sched) override
+		~AsyncWrapper()
 		{
-			assert(!done());
+			std::cout << "~AsyncWrapper " << hexPtr(this) << std::endl;
+		}
+
+		error_code resume_(Scheduler& sched) override
+		{
+			assert(mStatus == Status::Init);
+			mStatus = Status::Done;
+
+			sched.logEdge(*this, *mBase.get(), true);
 			mRet.mBase.reset(new Controller);
 			auto ptr = (Controller*)mRet.mBase.get();
-			sched.log(getName() + " -> " + mBase->getName() + "[style=dashed];");
-
 			ptr->mBase = std::move(mBase);
 
 
-			return ptr->resume(sched);
+			sched.resume(ptr);
+
+			sched.fulfillDep(*this, {}, nullptr);
+			//ptr->resume(sched);
+
+			return {};
 		}
 
 		bool done() override {
-			return mRet.mBase.get() != nullptr;
+			return mStatus == Status::Done;
 		};
 
 		void* getValue() override { return &mRet; };
@@ -357,10 +387,13 @@ namespace coproto
 			//mEc = e;
 			//mExPtr = std::move(p);
 		}
-		std::string getName() override
-		{
-			return mBase->getName() + "_async";
-		}
+		//std::string getName() override
+		//{
+		//	return
+		//		(mRet.mBase ?
+		//		mRet.mBase->getName():
+		//		mBase->getName()) + "_async";
+		//}
 
 		std::exception_ptr getExpPtr() override {
 			assert(0); //return mExPtr;
@@ -417,6 +450,8 @@ namespace coproto
 		error_code mEc;
 		u64 mResumeIdx = 0;
 		u64 mProtoIdx = 0;
+		std::string mLabel;
+
 		ProtoPromise() {
 			mProtoIdx = gProtoIdx++;
 			setName("Proto_" + std::to_string(mProtoIdx));
@@ -453,50 +488,28 @@ namespace coproto
 
 		std::suspend_never await_transform(const Name& name)
 		{
-			setName(name.mName);
+			mLabel = (name.mName);
 			return std::suspend_never{};
 		}
 
-		error_code resume(Scheduler& sched) override {
+		error_code resume_(Scheduler& sched) override {
 
 			mSched = &sched;
 
 			if (!done())
 			{
-				//auto n0 = getName();
-				//auto n1 = getName();
-				//if(mResumeIdx)
-				//	sched.log(n0 + " -> " + n1);
-
-
 				mEc = {};
-				getHandle().resume();
-
-
+				auto handle = getHandle();
+				handle.resume();
 			}
 
 			if (done())
 			{
-
 				mSched->fulfillDep(*this, mEc, mExPtr);
-
-				std::stringstream ss;
-				ss << "    subgraph cluster_" << std::to_string(mProtoIdx) << " { \n"
-					<< "        style = filled;\n"
-					<< "        color = lightgrey;\n"
-					<< "        node[style = filled, color = white];\n"
-					<< "        label = \"" << mName << "\";\n"
-					<< "        " << mName << "_" << 0;
-
-				for(u64 i = 1; i <= mResumeIdx; ++i)
-					ss << " -> " << mName << "_" << i;				
-				ss << "[style=invis];\n    }";
-
-				mSched->log(ss.str());
+				mSched->logProto(mName, mProtoIdx, mLabel, mResumeIdx);
 			}
 			else
 				++mResumeIdx;
-
 			return mEc;
 		};
 
@@ -516,10 +529,6 @@ namespace coproto
 		}
 		std::string getName() override
 		{
-			if (mName.size() == 0)
-			{
-				mName = "unknown_" + hexPtr(this);
-			}
 			return mName + "_" + std::to_string(mResumeIdx);
 		}
 
@@ -593,26 +602,14 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
-			auto promName = prom.getName();
-			auto protoName = proto.getName();
-			prom.mSched->log(promName + " -> " + protoName + ";");
+			//auto promName = prom.getName();
+			//auto protoName = proto.getName();
+			prom.mEc = prom.mSched->startSubproto(prom, proto);
 
-			auto ec = proto.resume(*prom.mSched);
+			//prom.mSched->addDep(prom, proto);
+			//prom.mEc = prom.mSched->resume(&proto);
 
-			if (ec == code::suspend)
-			{
-				prom.mSched->addDep(prom, proto);
-				//prom.mUptream.push_back(&proto);
-				//proto.mDownstream.push_back(&prom);
-				prom.mEc = ec;
-			}
-			else {
-				if (ec)
-					prom.mEc = ec;
-
-				prom.mSched->log(protoName + " -> " + promName + ";");
-			}
-			return !ec;
+			return !prom.mEc;
 		}
 		void await_suspend(coro_handle h) { }
 
@@ -648,19 +645,17 @@ namespace coproto
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
 
-			prom.mSched->log(prom.getName() + " -> " + proto.getName());
 
 			if (proto.done())
 			{
-				prom.mSched->log(proto.getName() + " -> " + prom.getName());
+				prom.mSched->logEdge(prom, proto);
+				prom.mSched->logEdge(proto, prom);
 
 				return true;
 			}
 			else
 			{
 				prom.mSched->addDep(prom, proto);
-				//prom.mUptream.push_back(&proto);
-				//proto.mDownstream.push_back(&prom);
 				return false;
 			}
 
@@ -685,7 +680,7 @@ namespace coproto
 	{
 	public:
 
-		struct Sched : public Scheduler
+		struct Sock : public Socket
 		{
 			u64 mIdx;
 			LocalScheduler* mSched;
@@ -695,7 +690,8 @@ namespace coproto
 		};
 
 		std::array<std::list<std::vector<u8>>, 2> mBuffs;
-		std::array<Sched, 2> mScheds;
+		std::array<Sock, 2> mSocks;
+		std::array<Scheduler, 2> mScheds;
 
 		template<typename T>
 		error_code execute(Proto<T>& p0, Proto<T>& p1)
@@ -708,10 +704,13 @@ namespace coproto
 			//mScheds[0].mPrint = true;
 
 			bool v = false;
-			mScheds[0].mIdx = 0;
-			mScheds[0].mSched = this;
-			mScheds[1].mIdx = 1;
-			mScheds[1].mSched = this;
+			mSocks[0].mIdx = 0;
+			mSocks[0].mSched = this;
+			mSocks[1].mIdx = 1;
+			mSocks[1].mSched = this;
+
+			mScheds[0].mSock = &mSocks[0];
+			mScheds[1].mSock = &mSocks[1];
 
 			mScheds[0].scheduleReady(*p0.mBase.get());
 			mScheds[1].scheduleReady(*p1.mBase.get());

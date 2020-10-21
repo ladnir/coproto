@@ -267,7 +267,7 @@ namespace coproto
 #endif
 
 
-			Interface* operator->() { return get(); }
+ 			Interface* operator->() { return get(); }
 			Interface* get() { return mData; }
 
 			const Interface* operator->() const { return get(); }
