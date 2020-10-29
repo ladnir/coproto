@@ -6,19 +6,40 @@
 #include "boost/container/small_vector.hpp"
 #include <unordered_map>
 #include <unordered_set>
+#include <functional>
 namespace coproto
 {
-	//struct ProtoAwaiter;
-	//struct EcProtoAwaiter;
+
+	struct Continutation
+	{
+		std::function<void(error_code ec, u64 byte_transfered)> mFn;
+		Continutation() = default;
+		Continutation(const Continutation&) = default;
+		Continutation(Continutation&&) = default;
+
+
+
+		void operator()(error_code ec, u64 byte_transfered) const
+		{
+			mFn(ec, byte_transfered);
+		}
+	};
+
 	extern std::atomic<u64> gProtoIdx;
 
 	class ProtoBase;
+	class IoProto;
+
+	struct AsyncSocket
+	{
+		virtual error_code recv(BufferInterface& data, Continutation&& cont) = 0;
+		virtual error_code send(BufferInterface& data, Continutation&& cont) = 0;
+	};
 
 	struct Socket
 	{
-
-		virtual error_code recv(Buffer& data) = 0;
-		virtual error_code send(Buffer& data) = 0;
+		virtual error_code recv(BufferInterface& data) = 0;
+		virtual error_code send(BufferInterface& data) = 0;
 	};
 
 	class Scheduler
@@ -26,7 +47,6 @@ namespace coproto
 	public:
 		using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
 		std::list<ProtoBase*> mReady, mNext;
-
 		std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
 
 
@@ -35,11 +55,14 @@ namespace coproto
 		std::vector<ProtoBase*> mStack;
 		
 		Socket* mSock;
+		AsyncSocket* mASock;
 
 		error_code resume(ProtoBase* proto);
 
 		u64 mRoundIdx = 0;
 		bool mPrint = false;
+		bool mSuspend;
+		//u64 mIsSuspended = false;
 
 		struct Entry
 		{
@@ -96,27 +119,19 @@ namespace coproto
 
 		void logSuspend(ProtoBase& p);
 
-		void runOne();
+		//void runOne();
+		void runRound();
 		bool done();
 
+		//template<typename RecvProto>
+		error_code recv(IoProto& data);
+		error_code send_(IoProto& data);
 
 
-		error_code recv(Buffer& data)
-		{
-			if (mEoRSet.find(mStack.back()) == mEoRSet.end())
-				return mSock->recv(data);
-			return code::noMessageAvailable;
-		}
-		error_code send(Buffer& data)
-		{
-			return mSock->send(data);
-		}
-
-
-		void scheduleNext(ProtoBase& proto);
+		//void scheduleNext(ProtoBase& proto);
 		void scheduleReady(ProtoBase& proto);
 
-		error_code startSubproto(ProtoBase& downstream, ProtoBase& upstream);
+		//error_code startSubproto(ProtoBase& downstream, ProtoBase& upstream);
 
 		void addDep(ProtoBase& downstream, ProtoBase& upstream);
 

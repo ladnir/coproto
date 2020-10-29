@@ -62,23 +62,62 @@ namespace coproto
 	
 	error_code Scheduler::resume(ProtoBase* proto)
 	{
+		bool eor = false;
+		if (mStack.size())
+		{
+
+			auto iter = mEoRSet.find(mStack.back());
+			if (iter != mEoRSet.end()) {
+				eor = true;
+				mEoRSet.insert(proto);
+			}
+		}
+
 		mStack.push_back(proto);
+
+		if (mPrint)
+			std::cout << "resume " << proto->getName() << (eor ? " eor": "") << std::endl;
 		auto ec = proto->resume_(*this);
 		mStack.pop_back();
 		return ec;
 	}
-	void Scheduler::runOne()
+	//void Scheduler::runOne()
+	//{
+	//	auto task = mReady.front();
+	//	resume(task);
+	//	mReady.pop_front();
+	//}
+	void Scheduler::runRound()
 	{
+
 		ProtoBase* task = nullptr;
-		while (mReady.size())
+		mSuspend = false;
+
+		while (mReady.size() && mSuspend == false)
 		{
 			task = mReady.front();
-			resume(task);
 			mReady.pop_front();
+			auto ec = resume(task);
+
+			if (ec && ec != code::suspend)
+			{
+				return;
+			}
 		}
-		std::swap(mReady, mNext);
-		mEoRSet.clear();
-		++mRoundIdx;
+
+		if (mReady.size() == 0)
+		{
+
+			if (mPrint)
+			{
+				std::cout << " ------------ eor ------------- " << std::endl;
+			}
+			std::swap(mReady, mNext);
+			mEoRSet.clear();
+			++mRoundIdx;
+		}
+
+
 	}
 
 	bool Scheduler::done()
@@ -87,16 +126,63 @@ namespace coproto
 	}
 
 
-
-
-	void Scheduler::scheduleNext(ProtoBase& proto)
+	error_code Scheduler::recv(IoProto& data)
 	{
+		error_code ec;
 
-		logSuspend(proto);
+		if (mEoRSet.find(mStack.back()) == mEoRSet.end())
+		{
 
-		mNext.push_back(&proto);
+			ec = mSock->recv(data);
 
+			if (ec == code::suspend)
+			{
+				if(mPrint)
+					std::cout << " ~~ susp " << data.getName() << std::endl;
+				mReady.push_front(&data);
+				mSuspend = true;
+			}
+			else
+			{
+				if(mPrint)
+					std::cout  << " ~~ recv " << data.getName() << std::endl;
+
+			}
+		}
+		else
+		{
+			if (mPrint)
+				std::cout << " ~~ next " << data.getName() << std::endl;
+			ec = code::suspend;
+			mNext.push_back(&data);
+		}
+
+		if(ec == code::suspend)
+			logSuspend(data);
+
+		return ec;
 	}
+
+	error_code Scheduler::send_(IoProto& data)
+	{
+		if (mPrint)
+		{
+			std::cout << " ~~ send " << data.getName() << std::endl;
+		}
+
+		return mSock->send(data);
+	}
+
+
+
+
+	//void Scheduler::scheduleNext(ProtoBase& proto)
+	//{
+
+
+	//	mNext.push_back(&proto);
+
+	//}
 
 	void Scheduler::scheduleReady(ProtoBase& proto)
 	{
@@ -107,20 +193,11 @@ namespace coproto
 
 	}
 
-	error_code Scheduler::startSubproto(ProtoBase& parent, ProtoBase& sub)
-	{
-		logEdge(parent, sub);
+	//error_code Scheduler::startSubproto(ProtoBase& parent, ProtoBase& sub)
+	//{
 
-		addDep(parent, sub);
 
-		auto iter = mEoRSet.find(&parent);
-		if (iter != mEoRSet.end()) {
-			mEoRSet.insert(&sub);
-		}
-
-		return resume(&sub);
-
-	}
+	//}
 
 	void Scheduler::addDep(ProtoBase& downstream, ProtoBase& upstream)
 	{

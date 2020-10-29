@@ -337,61 +337,75 @@ namespace coproto
 
 	}
 
-	struct Buffer
+	struct BufferInterface
 	{
 		virtual span<u8> asSpan() = 0;
 		virtual error_code tryResize(u64 size) = 0;
 	};
 
-	template<typename Container, bool supportResize = true>
-	struct RefBuffer : public Buffer
+
+	struct Buffer
 	{
-		static_assert(
-			is_trivial_container_v<Container> ||
-			std::is_trivial_v<Container>, "we expect a trivial containter or trivial type.");
+		internal::Inline<BufferInterface, sizeof(u64) * 4> mStorage;
 
-		Container& mContainer;
-		RefBuffer(Container& container)
-			:mContainer(container)
-		{}
-
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mContainer);
+		span<u8> asSpan() {
+			return mStorage->asSpan();
 		}
-
-		error_code tryResize(u64 size) override
-		{
-			if (supportResize)
-				return internal::tryResize(size, mContainer);
-			else
-				return code::noResizeSupport;
+		error_code tryResize(u64 size) {
+			return mStorage->tryResize(size);
 		}
 	};
 
 
-	template<typename Container>
-	struct MoveBuffer : public Buffer
-	{
-		static_assert(
-			is_trivial_container_v<Container> ||
-			std::is_trivial_v<Container>, "we expect a trivial containter or trivial type.");
+	//template<typename Container, bool supportResize = true>
+	//struct RefBuffer : public BufferInterface
+	//{
+	//	static_assert(
+	//		is_trivial_container_v<Container> ||
+	//		std::is_trivial_v<Container>, "we expect a trivial containter or trivial type.");
 
-		Container mContainer;
-		MoveBuffer(Container&& container)
-			:mContainer(std::forward<Container>(container))
-		{}
+	//	Container& mContainer;
+	//	RefBuffer(Container& container)
+	//		:mContainer(container)
+	//	{}
 
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mContainer);
-		}
+	//	span<u8> asSpan() override
+	//	{
+	//		return internal::asSpan(mContainer);
+	//	}
 
-		error_code tryResize(u64 size) override
-		{
-			return code::noResizeSupport;
-		}
-	};
+	//	error_code tryResize(u64 size) override
+	//	{
+	//		if (supportResize)
+	//			return internal::tryResize(size, mContainer);
+	//		else
+	//			return code::noResizeSupport;
+	//	}
+	//};
+
+
+	//template<typename Container>
+	//struct MoveBuffer : public BufferInterface
+	//{
+	//	static_assert(
+	//		is_trivial_container_v<Container> ||
+	//		std::is_trivial_v<Container>, "we expect a trivial containter or trivial type.");
+
+	//	Container mContainer;
+	//	MoveBuffer(Container&& container)
+	//		:mContainer(std::forward<Container>(container))
+	//	{}
+
+	//	span<u8> asSpan() override
+	//	{
+	//		return internal::asSpan(mContainer);
+	//	}
+
+	//	error_code tryResize(u64 size) override
+	//	{
+	//		return code::noResizeSupport;
+	//	}
+	//};
 
 
 

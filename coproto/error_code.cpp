@@ -20,8 +20,8 @@ namespace { // anonymous namespace
                 return "The io operation completed successfully";
             case coproto::code::ioError:
                 return "The io operation failed and the caller should abort";
-            case coproto::code::noMessageAvailable:
-                return "Message has yet to arrive";
+            //case coproto::code::endOfRound:
+            //    return "This protocol has reached the end of the round and is being suspended";
             case coproto::code::suspend:
                 return "The protocol has been suspended for some reason.";
             case coproto::code::badBufferSize:

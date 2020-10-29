@@ -65,6 +65,9 @@ namespace coproto
 	};
 
 
+	class IoProto : public ProtoBase, public BufferInterface
+	{};
+
 	template<typename T>
 	struct EndOfRoundAwaiter
 	{
@@ -604,7 +607,13 @@ namespace coproto
 			auto& proto = *mTask.mBase.get();
 			//auto promName = prom.getName();
 			//auto protoName = proto.getName();
-			prom.mEc = prom.mSched->startSubproto(prom, proto);
+			prom.mSched->logEdge(prom, proto);
+
+			prom.mSched->addDep(prom, proto);
+
+
+			prom.mEc = prom.mSched->resume(&proto);
+			//= prom.mSched->startSubproto(prom, proto);
 
 			//prom.mSched->addDep(prom, proto);
 			//prom.mEc = prom.mSched->resume(&proto);
@@ -685,8 +694,8 @@ namespace coproto
 			u64 mIdx;
 			LocalScheduler* mSched;
 
-			error_code recv(Buffer& data) override;
-			error_code send(Buffer& data) override;
+			error_code recv(BufferInterface& data) override;
+			error_code send(BufferInterface& data) override;
 		};
 
 		std::array<std::list<std::vector<u8>>, 2> mBuffs;
@@ -723,9 +732,7 @@ namespace coproto
 
 				if (mScheds[0].done() == false)
 				{
-					mScheds[0].runOne();
-					if (v)
-						std::cout << "p0 end of round " << std::endl;
+					mScheds[0].runRound();
 
 					if (mScheds[0].done())
 					{
@@ -733,14 +740,16 @@ namespace coproto
 						if (e0)
 							return e0;
 					}
+
+
+					if (mScheds[0].mPrint)
+						std::cout << "-------------- p0 suspend --------------" << std::endl;
 				}
 
 				if (mScheds[1].done() == false)
 				{
-					mScheds[1].runOne();
+					mScheds[1].runRound();
 
-					if (v)
-						std::cout << "p1 end of round " << std::endl;
 
 					if (mScheds[1].done())
 					{
@@ -748,6 +757,9 @@ namespace coproto
 						if (e1)
 							return e1;
 					}
+
+					if (mScheds[0].mPrint)
+						std::cout << "-------------- p1 suspend --------------" << std::endl;
 				}
 			}
 

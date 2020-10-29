@@ -14,7 +14,7 @@ namespace coproto
 		//The io operation failed and the caller should abort;
 		ioError,
 		// message has yet to arrive
-		noMessageAvailable,
+		//noMessageAvailable,
 		// bad buffer size. The reciever's buffer size does not match the number of bytes sent.
 		badBufferSize,
 		// data was received over the connection and the receiver buffer was resized. However, the receive buffer
@@ -25,8 +25,10 @@ namespace coproto
 		// the numberleying buffer does not support resizing
 		noResizeSupport,
 		// The protocol has been suspended for some reason.
-		suspend,
 
+		//endOfRound,
+
+		suspend,
 		//endOfRoundFlag,
 		// sending a zero length message is not allowed.
 		sendLengthZeroMsg,

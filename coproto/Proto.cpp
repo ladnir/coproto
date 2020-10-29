@@ -12,15 +12,15 @@ namespace coproto
 
 
 	template<typename Container>
-	class RecvBuff : public Buffer, public ProtoBase
+	class RecvProto : public IoProto
 	{
 	public:
 		Container mContainer;
-		error_code mEc = code::noMessageAvailable;
+		error_code mEc = code::suspend;
 
-		RecvBuff()
+		RecvProto()
 		{
-				setName("recv_" + std::to_string(gProtoIdx++));
+			setName("recv_" + std::to_string(gProtoIdx++));
 		}
 
 		span<u8> asSpan() override
@@ -41,21 +41,15 @@ namespace coproto
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
-			if (mEc == code::noMessageAvailable)
-			{
-				sched.scheduleNext(*this);
-				return code::suspend;
-			}
-
 			return mEc;
 		}
 
 		bool done() override {
-			return mEc != code::noMessageAvailable;
+			return mEc != code::suspend;
 		}
 
 		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendBuff)");
+			assert(0 && "not supported (RefSendProto)");
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;
@@ -69,13 +63,13 @@ namespace coproto
 
 
 	template<typename Container, bool allowResize = true>
-	class RefRecvBuff : public Buffer, public ProtoBase
+	class RefRecvProto : public IoProto
 	{
 	public:
 		Container& mContainer;
-		error_code mEc = code::noMessageAvailable;
+		error_code mEc = code::suspend;
 
-		RefRecvBuff(Container& t)
+		RefRecvProto(Container& t)
 			:mContainer(t)
 		{
 			setName("recv_" + std::to_string(gProtoIdx++));
@@ -102,16 +96,10 @@ namespace coproto
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
-			if (mEc == code::noMessageAvailable)
-			{
-				sched.scheduleNext(*this);
-				return code::suspend;
-			}
-
 			return mEc;
 		}
 		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendBuff)");
+			assert(0 && "not supported (RefSendProto)");
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;
@@ -123,19 +111,19 @@ namespace coproto
 		}
 
 		bool done() override {
-			return mEc != code::noMessageAvailable;
+			return mEc != code::suspend;
 		}
 
 	};
 
 	template<typename Container>
-	class RefSendBuff : public Buffer, public ProtoBase
+	class RefSendProto : public IoProto
 	{
 	public:
 		Container& mContainer;
-		error_code mEc = code::noMessageAvailable;
+		error_code mEc = code::suspend;
 
-		RefSendBuff(Container& t)
+		RefSendProto(Container& t)
 			:mContainer(t)
 		{
 			setName("send_" + std::to_string(gProtoIdx++));
@@ -153,7 +141,10 @@ namespace coproto
 
 
 		error_code resume_(Scheduler& sched) override {
-			mEc = sched.send(*this);
+			mEc = sched.send_(*this);
+
+			assert(mEc != code::suspend);
+
 			if (done())
 			{
 				sched.fulfillDep(*this, mEc, nullptr);
@@ -164,7 +155,7 @@ namespace coproto
 
 
 		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendBuff)");
+			assert(0 && "not supported (RefSendProto)");
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;
@@ -175,19 +166,19 @@ namespace coproto
 		}
 
 		bool done() override {
-			return mEc != code::noMessageAvailable;
+			return mEc != code::suspend;
 		}
 	};
 
 
 	template<typename Container>
-	class MvSendBuff : public Buffer, public ProtoBase
+	class MvSendProto : public IoProto
 	{
 	public:
 		Container mContainer;
-		error_code mEc = code::noMessageAvailable;
+		error_code mEc = code::suspend;
 
-		MvSendBuff(Container&& t)
+		MvSendProto(Container&& t)
 			:mContainer(std::move(t))
 		{
 			setName("send_" + std::to_string(gProtoIdx++));
@@ -206,7 +197,8 @@ namespace coproto
 
 		error_code resume_(Scheduler& sched) override {
 
-			mEc = sched.send(*this);
+			mEc = sched.send_(*this);
+			assert(mEc != code::suspend);
 			if (done())
 			{
 				sched.fulfillDep(*this, mEc, nullptr);
@@ -216,7 +208,7 @@ namespace coproto
 		}
 
 		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendBuff)");
+			assert(0 && "not supported (RefSendProto)");
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;
@@ -226,7 +218,7 @@ namespace coproto
 			return mEc;
 		}
 		bool done() override {
-			return mEc != code::noMessageAvailable;
+			return mEc != code::suspend;
 		}
 	};
 
@@ -235,7 +227,7 @@ namespace coproto
 	Proto<void> send(Container& t)
 	{
 		Proto<void> proto;
-		proto.mBase.emplace<RefSendBuff<Container>>(t);
+		proto.mBase.emplace<RefSendProto<Container>>(t);
 		return proto;
 	}
 
@@ -243,7 +235,7 @@ namespace coproto
 	Proto<void> send(Container&& t)
 	{
 		Proto<void> proto;
-		proto.mBase.emplace<MvSendBuff<Container>>(std::forward<Container>(t));
+		proto.mBase.emplace<MvSendProto<Container>>(std::forward<Container>(t));
 		return proto;
 	}
 
@@ -252,7 +244,7 @@ namespace coproto
 	Proto<void> recv(Container& t)
 	{
 		Proto<void> proto;
-		proto.mBase.emplace<RefRecvBuff<Container>>(t);
+		proto.mBase.emplace<RefRecvProto<Container>>(t);
 		return proto;
 	}
 
@@ -261,7 +253,7 @@ namespace coproto
 	Proto<void> recvFixedSize(Container& t)
 	{
 		Proto<void> proto;
-		proto.mBase.emplace<RefRecvBuff<Container, false>>(t);
+		proto.mBase.emplace<RefRecvProto<Container, false>>(t);
 		return proto;
 	}
 
@@ -270,7 +262,7 @@ namespace coproto
 	Proto<Container> recv()
 	{
 		Proto<Container> proto;
-		proto.mBase.emplace<RecvBuff<Container>>();
+		proto.mBase.emplace<RecvProto<Container>>();
 		return proto;
 	}
 
@@ -281,7 +273,7 @@ namespace coproto
 	}
 
 
-	error_code LocalScheduler::Sock::recv(Buffer& buff)
+	error_code LocalScheduler::Sock::recv(BufferInterface& buff)
 	{
 		error_code ec;
 		if (mSched->mBuffs[mIdx].size())
@@ -299,13 +291,13 @@ namespace coproto
 		}
 		else
 		{
-			ec = code::noMessageAvailable;
+			ec = code::suspend;
 		}
 
 		return ec;
 	}
 
-	error_code LocalScheduler::Sock::send(Buffer& buff)
+	error_code LocalScheduler::Sock::send(BufferInterface& buff)
 	{
 
 		auto data = buff.asSpan();
@@ -316,9 +308,131 @@ namespace coproto
 		return {};
 	}
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	namespace tests
 	{
 
+
+		Proto<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
+		{
+			auto np = name + "_server_" + std::to_string(i) + "_" + std::to_string(length);
+			co_await Name(np);
+
+
+			auto exp = std::vector<char>(length);
+			std::iota(exp.begin(), exp.end(), 0);
+
+			if (v)
+				std::cout << name << " s start " << i << " " << length << std::endl;
+
+			if (v)
+				std::cout << name << " s recv " << i << " " << length << " begin" << std::endl;
+			auto msg = std::vector<char>();
+
+			for (u64 i = 0; i < rep; ++i)
+			{
+				auto r = recv<std::vector<char>>();
+				r.setName(np + "_r" + std::to_string(i));
+				msg = co_await std::move(r);
+				//msg = co_await recv<std::vector<char>>();
+				if (exp != msg)
+				{
+					std::cout << "bad msg " << LOCATION << std::endl;
+					throw std::runtime_error("");
+				}
+			}
+
+			if (v)
+				std::cout << name << " s recv " << i << " " << length << " done" << std::endl;
+
+
+			if (v)
+				std::cout << name << " s send " << i << " " << length << std::endl;
+			for (u64 i = 0; i < rep; ++i)
+			{
+				auto s = send(msg);
+				s.setName(np + "_s" + std::to_string(i));
+				co_await std::move(s);
+			}
+
+			co_await EndOfRound();
+			if (i)
+			{
+				co_return co_await echoServer(i - 1, length, rep, name, v);
+			}
+			else
+				co_return 0;
+		}
+		Proto<int> echoClient(u64 i, u64 length, u64 rep, std::string name , bool v )
+		{
+			auto np = name + "_client_" + std::to_string(i) + "_" + std::to_string(length);
+			co_await Name(np);
+			if (v)
+				std::cout << name << " c start " << i << " " << length << std::endl;
+
+			auto msg = std::vector<char>(length);
+			std::iota(msg.begin(), msg.end(), 0);
+			if (v)
+				std::cout << name << " c send " << i << " " << length << std::endl;
+			for (u64 i = 0; i < rep; ++i)
+			{
+				auto s = send(msg);
+				s.setName(np + "_s" + std::to_string(i));
+				co_await std::move(s);
+			}
+			co_await EndOfRound();
+
+			if (v)
+				std::cout << name << " c recv " << i << " " << length << " begin" << std::endl;
+
+			for (u64 i = 0; i < rep; ++i)
+			{
+
+				auto r = recv<std::vector<char>>();
+				r.setName(np + "_r" + std::to_string(i));
+				auto msg2 = co_await std::move(r);
+				//auto msg2 = co_await recv<std::vector<char>>();
+				if (msg2 != msg)
+				{
+					std::cout << "bad msg " << LOCATION << std::endl;
+					throw std::runtime_error("");
+				}
+			}
+			if (v)
+				std::cout << name << " c recv " << i << " " << length << " done" << std::endl;
+
+			if (i)
+			{
+				co_return co_await echoClient(i - 1, length, rep, name, v);
+			}
+			else
+			{
+				co_return 0;
+			}
+		}
+
+
+
+		
 		void strSendRecvTest()
 		{
 			auto proto = [](bool party) -> Proto<> {
@@ -329,6 +443,8 @@ namespace coproto
 					if (party)
 					{
 						co_await send(str);
+
+						co_await EndOfRound();
 						//std::cout << " p1 sent" << std::endl;
 						str = co_await recv<std::string>();
 						//std::cout << " p1 recv" << std::endl;
@@ -347,6 +463,9 @@ namespace coproto
 
 						str.back() += 1;
 						co_await send(str);
+
+
+						co_await EndOfRound();
 						//std::cout << " p0 sent" << std::endl;
 
 					}
@@ -359,12 +478,12 @@ namespace coproto
 			//std::cout << sched.mScheds[0].getDot() << std::endl;
 			//std::cout << sched.mScheds[1].getDot() << std::endl;
 
-			if (sched.mScheds[0].numRounds() != 6)
+			if (ec)
+				throw std::runtime_error(ec.message());
+			if (sched.mScheds[0].numRounds() != 5)
 				throw std::runtime_error("num round");
 			if (sched.mScheds[1].numRounds() != 6)
 				throw std::runtime_error("num round");
-			if (ec)
-				throw std::runtime_error(ec.message());
 		}
 
 
@@ -593,68 +712,6 @@ namespace coproto
 				throw std::runtime_error("");
 		}
 
-
-		Proto<> echoServer(u64 i, u64 length = 10, std::string name = "p1", bool v = false)
-		{
-			co_await Name(name + "_server_" + std::to_string(i) + "_" + std::to_string(length));
-			auto exp = std::vector<char>(length);
-			std::iota(exp.begin(), exp.end(), 0);
-
-			if (v)
-				std::cout << name << " es start " << i << " " << length << std::endl;
-
-			if (v)
-				std::cout << name << " es recv " << i << " " << length << " begin" << std::endl;
-			auto msg = co_await recv<std::vector<char>>();
-			if (v)
-				std::cout << name << " es recv " << i << " " << length << " done" << std::endl;
-
-			if (exp != msg)
-				throw std::runtime_error("");
-
-
-			if (v)
-				std::cout << name << " es send " << i << " " << length << std::endl;
-			co_await send(msg);
-
-			co_await EndOfRound();
-
-			if (i)
-			{
-				co_await echoServer(i - 1);
-			}
-		}
-		Proto<> echoClient(u64 i, u64 length = 10, std::string name = "p0", bool v = false)
-		{
-			co_await Name(name + "_client_" + std::to_string(i) + "_" + std::to_string(length));
-			if (v)
-				std::cout << name << " ec start " << i << " " << length << std::endl;
-
-			auto msg = std::vector<char>(length);
-			std::iota(msg.begin(), msg.end(), 0);
-			if (v)
-				std::cout << name << " ec send " << i << " " << length << std::endl;
-			co_await send(msg);
-			co_await EndOfRound();
-
-			if (v)
-				std::cout << name << " ec recv " << i << " " << length << " begin" << std::endl;
-			auto rev = co_await recv<std::vector<char>>();
-
-			if (v)
-				std::cout << name << " ec recv " << i << " " << length << " done" << std::endl;
-			if (msg != rev)
-			{
-				throw std::runtime_error("hello world");
-			}
-
-			if (i)
-			{
-				co_await echoClient(i - 1);
-			}
-		}
-
-
 		void nestedSendRecvTest()
 		{
 			auto proto = [](bool party) -> Proto<> {
@@ -667,7 +724,7 @@ namespace coproto
 					if (ec)
 						throw std::runtime_error(LOCATION);
 
-					co_await echoServer(n, 10, "p1", false);
+					co_await echoServer(n, 10, 1, "p1", false);
 				}
 				else
 				{
@@ -678,7 +735,7 @@ namespace coproto
 					if (str != "hello from 0")
 						throw std::runtime_error(LOCATION);
 
-					co_await echoClient(n, 10, "p0", false);
+					co_await echoClient(n, 10, 1, "p0", false);
 					//std::cout << " p0 sent" << std::endl;
 
 				}
@@ -775,67 +832,90 @@ namespace coproto
 
 		void asyncProtocolTest()
 		{
-			u64 n = 1;
-			auto proto = [n](bool party) -> Proto<> {
+
+#define MULTI
+			bool print = false;
+			u64 n = 3;
+			u64 rep = 1;
+			auto proto = [n, print,rep](bool party) -> Proto<> {
 
 				if (party)
 				{
 					auto name = std::string("p1");
 					co_await Name(name);
 					std::vector<u64> buff(10);
-					//co_await send(buff);
 
-					auto fu0 = co_await echoServer(n, 5, name, false).async();
-					auto fu1 = co_await echoServer(n + 2, 6, name).async();
-					auto fu2 = co_await echoServer(n, 7, name).async();
-					auto fu3 = co_await echoServer(n + 7, 8, name).async();
-					auto fu4 = co_await echoServer(n, 9, name).async();
-					co_await echoClient(n, 10, name, false);
+
+
+					co_await recv(buff);
+					co_await EndOfRound();
+
+					auto fu0 = co_await echoServer(n, 5, rep, name, print).async();
+
+#ifdef MULTI
+					auto fu1 = co_await echoServer(n + 2, 6, rep, name, false).async();
+					auto fu2 = co_await echoServer(n, 7, rep, name, false).async();
+					auto fu3 = co_await echoServer(n + 7, 8, rep, name, false).async();
+					auto fu4 = co_await echoServer(n, 9, rep, name, false).async();
+#endif
+
+					co_await echoClient(n, 10, rep, name, print);
 					//co_await send(buff);
 
 					co_await fu0;
+#ifdef MULTI
 					co_await fu1;
 					co_await fu2;
 					co_await fu3;
 					co_await fu4;
+#endif
 				}
 				else
 				{
 					auto name = std::string("p0");
 					co_await Name(name);
 					std::vector<u64> buff(10);
+					co_await send(buff);
 					//co_await recv(buff);
-					auto fu0 = co_await echoClient(n, 5, name, false).async();
-					auto fu1 = co_await echoClient(n + 2, 6, name).async();
-					auto fu2 = co_await echoClient(n, 7, name).async();
-					auto fu3 = co_await echoClient(n + 7, 8, name).async();
-					auto fu4 = co_await echoClient(n, 9, name).async();
-					co_await echoServer(n, 10, name, false);
+					auto fu0 = co_await echoClient(n, 5, rep, name, print).async();
+#ifdef MULTI
+					auto fu1 = co_await echoClient(n + 2, 6, rep, name, false).async();
+					auto fu2 = co_await echoClient(n, 7, rep, name, false).async();
+					auto fu3 = co_await echoClient(n + 7, 8, rep, name, false).async();
+					auto fu4 = co_await echoClient(n, 9, rep, name, false).async();
+#endif
+					co_await echoServer(n, 10, rep, name, print);
 					//co_await recv(buff);
 
 					co_await fu0;
+#ifdef MULTI
 					co_await fu1;
 					co_await fu2;
 					co_await fu3;
 					co_await fu4;
+#endif
 				}
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
 			LocalScheduler sched;
+			//sched.mScheds[0].mPrint = true;
+			//sched.mScheds[1].mPrint = true;
 			auto ec = sched.execute(p0, p1);
 
 
 			//std::cout << sched.mScheds[0].getDot() << std::endl;
 			//std::cout << sched.mScheds[1].getDot() << std::endl;
-
-			if (sched.mScheds[0].numRounds() != n + 1 + 8)
-				throw std::runtime_error("num round");
-			if (sched.mScheds[1].numRounds() != n + 1 + 7)
-				throw std::runtime_error("num round");
-
 			if (ec)
 				throw std::runtime_error(ec.message());
+
+			auto r0 = sched.mScheds[0].numRounds();
+			auto r1 = sched.mScheds[1].numRounds();
+			//if (r0 != n + 1)
+			//	throw std::runtime_error("num round");
+			//if (r1 != n)
+			//	throw std::runtime_error("num round");
+
 		}
 
 		void asyncThrowProtocolTest()
