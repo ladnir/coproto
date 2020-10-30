@@ -273,21 +273,22 @@ namespace coproto
 	}
 
 
-	error_code LocalScheduler::Sock::recv(BufferInterface& buff)
+	error_code LocalScheduler::Sock::recv(span<u8> data)
 	{
 		error_code ec;
-		if (mSched->mBuffs[mIdx].size())
+		if (mInbound.size())
 		{
-			auto& front = mSched->mBuffs[mIdx].front();
-			if (buff.asSpan().size() != front.size())
-				ec = buff.tryResize(front.size());
+			auto& front = mInbound.front();
+			assert(data.size() == front.size());
 
-			if (!ec)
-			{
-				auto data = buff.asSpan();
+			//if (buff.asSpan().size() != front.size())
+			//	ec = buff.tryResize(front.size());
+
+			//if (!ec)
+			//{
 				std::memcpy(data.data(), front.data(), data.size());
-				mSched->mBuffs[mIdx].pop_front();
-			}
+				mInbound.pop_front();
+			//}
 		}
 		else
 		{
@@ -297,14 +298,14 @@ namespace coproto
 		return ec;
 	}
 
-	error_code LocalScheduler::Sock::send(BufferInterface& buff)
+	error_code LocalScheduler::Sock::send(span<u8> data)
 	{
 
-		auto data = buff.asSpan();
-		if (data.size() == 0)
-			return code::sendLengthZeroMsg;
+		//auto data = buff.asSpan();
+		//if (data.size() == 0)
+		//	return code::sendLengthZeroMsg;
 
-		mSched->mBuffs[mIdx ^ 1].emplace_back(data.begin(), data.end());
+		mOutbound.emplace_back(data.begin(), data.end());
 		return {};
 	}
 
@@ -480,7 +481,7 @@ namespace coproto
 
 			if (ec)
 				throw std::runtime_error(ec.message());
-			if (sched.mScheds[0].numRounds() != 5)
+			if (sched.mScheds[0].numRounds() != 6)
 				throw std::runtime_error("num round");
 			if (sched.mScheds[1].numRounds() != 6)
 				throw std::runtime_error("num round");
@@ -835,7 +836,7 @@ namespace coproto
 
 #define MULTI
 			bool print = false;
-			u64 n = 3;
+			u64 n = 1;
 			u64 rep = 1;
 			auto proto = [n, print,rep](bool party) -> Proto<> {
 
@@ -901,6 +902,7 @@ namespace coproto
 			LocalScheduler sched;
 			//sched.mScheds[0].mPrint = true;
 			//sched.mScheds[1].mPrint = true;
+
 			auto ec = sched.execute(p0, p1);
 
 
@@ -937,15 +939,17 @@ namespace coproto
 				{
 					std::vector<u64> buff(10);
 					co_await recv(buff);
-					co_await throwClient(n);
+					auto fu = co_await throwClient(n).async();
 					//co_await recv(buff);
 
-					//co_await fu;
+					co_await fu;
 				}
 			};
 			auto p0 = proto(0);
 			auto p1 = proto(1);
 			LocalScheduler sched;
+			//sched.mScheds[0].mPrint = true;
+			//sched.mScheds[1].mPrint = true;
 			auto ec = sched.execute(p0, p1);
 			if (ec != code::uncaughtException)
 				throw std::runtime_error("");

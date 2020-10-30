@@ -39,6 +39,11 @@ namespace coproto
 		ProtoBase(const ProtoBase&) = default;
 		ProtoBase(ProtoBase&&) = default;
 
+		u32 mSlotIdx = ~0;
+		u32& getSlot()
+		{
+			return mSlotIdx;
+		}
 
 		std::string mName;
 		void setName(std::string name)
@@ -255,6 +260,8 @@ namespace coproto
 			{
 				if (mStatus == Status::Init)
 				{
+					mBase->mSlotIdx = sched.mNextSlot++;
+
 					auto ec = sched.resume(mBase.get());
 					if (ec == code::suspend)
 					{
@@ -691,16 +698,23 @@ namespace coproto
 
 		struct Sock : public Socket
 		{
-			u64 mIdx;
-			LocalScheduler* mSched;
+			//u64 mIdx;
+			//LocalScheduler* mSched;
 
-			error_code recv(BufferInterface& data) override;
-			error_code send(BufferInterface& data) override;
+			std::list<std::vector<u8>> mInbound, mOutbound;
+
+			error_code recv(span<u8> data) override;
+			error_code send(span<u8> data) override;
 		};
 
-		std::array<std::list<std::vector<u8>>, 2> mBuffs;
 		std::array<Sock, 2> mSocks;
 		std::array<Scheduler, 2> mScheds;
+
+		void sendMsgs(u64 sender)
+		{
+			assert(mSocks[sender ^ 1].mInbound.size() == 0);
+			mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
+		}
 
 		template<typename T>
 		error_code execute(Proto<T>& p0, Proto<T>& p1)
@@ -712,15 +726,18 @@ namespace coproto
 
 			//mScheds[0].mPrint = true;
 
-			bool v = false;
-			mSocks[0].mIdx = 0;
-			mSocks[0].mSched = this;
-			mSocks[1].mIdx = 1;
-			mSocks[1].mSched = this;
+			//bool v = false;
+			//mSocks[0].mIdx = 0;
+			//mSocks[0].mSched = this;
+			//mSocks[1].mIdx = 1;
+			//mSocks[1].mSched = this;
 
 			mScheds[0].mSock = &mSocks[0];
 			mScheds[1].mSock = &mSocks[1];
 
+
+			p0.mBase->mSlotIdx = 0;
+			p1.mBase->mSlotIdx = 0;
 			mScheds[0].scheduleReady(*p0.mBase.get());
 			mScheds[1].scheduleReady(*p1.mBase.get());
 			mScheds[0].mRoundIdx = 0;
@@ -741,7 +758,7 @@ namespace coproto
 							return e0;
 					}
 
-
+					sendMsgs(0);
 					if (mScheds[0].mPrint)
 						std::cout << "-------------- p0 suspend --------------" << std::endl;
 				}
@@ -757,6 +774,8 @@ namespace coproto
 						if (e1)
 							return e1;
 					}
+
+					sendMsgs(1);
 
 					if (mScheds[0].mPrint)
 						std::cout << "-------------- p1 suspend --------------" << std::endl;

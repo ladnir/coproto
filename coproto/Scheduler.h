@@ -38,19 +38,20 @@ namespace coproto
 
 	struct Socket
 	{
-		virtual error_code recv(BufferInterface& data) = 0;
-		virtual error_code send(BufferInterface& data) = 0;
+		virtual error_code recv(span<u8> data) = 0;
+		virtual error_code send(span<u8> data) = 0;
 	};
 
 	class Scheduler
 	{
 	public:
 		using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
-		std::list<ProtoBase*> mReady, mNext;
+		std::list<ProtoBase*> mReady;
 		std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
 
 
 		std::unordered_set<ProtoBase*> mEoRSet;
+		std::unordered_map<u32, ProtoBase*> mSlotWaiters;
 
 		std::vector<ProtoBase*> mStack;
 		
@@ -60,7 +61,7 @@ namespace coproto
 		error_code resume(ProtoBase* proto);
 
 		u64 mRoundIdx = 0;
-		bool mPrint = false;
+		bool mPrint = false, mLogging = false;
 		bool mSuspend;
 		//u64 mIsSuspended = false;
 
@@ -123,7 +124,23 @@ namespace coproto
 		void runRound();
 		bool done();
 
-		//template<typename RecvProto>
+		
+		u32 mNextSlot = 1;
+		bool mHaveHeader = false;
+
+		u32& getHeaderSlot()
+		{
+			return ((u32*)mHeader.data())[1];
+		}
+		u32& getHeaderSize()
+		{
+			return ((u32*)mHeader.data())[0];
+		}
+
+		std::array<u8, sizeof(u64)> mHeader;
+
+		error_code recvHeader();
+
 		error_code recv(IoProto& data);
 		error_code send_(IoProto& data);
 
