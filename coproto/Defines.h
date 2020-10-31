@@ -3,7 +3,7 @@
 
 #include <cstdint>
 #include <cryptoTools/Common/Defines.h>
-
+//#define COPROTO_LOGGING
 namespace coproto
 {
 

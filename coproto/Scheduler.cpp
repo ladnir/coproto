@@ -6,80 +6,18 @@ namespace coproto
 {
 	std::atomic<u64> gProtoIdx(0);
 
-	void Scheduler::logEdge(ProtoBase& parent, ProtoBase& child, bool dashed)
-	{
-		if (mLogging)
-			logEdge(parent.getName(), child.getName());
-	}
-	void Scheduler::logEdge(std::string pp, std::string cc, bool dashed)
-	{
-		if (mLogging)
-		{
-
-			auto cp = std::make_pair(std::move(cc), std::move(pp));
-			auto iter = mEdgeSet.find(cp);
-
-			if (iter != mEdgeSet.end())
-			{
-				mLogs[iter->second].mBidirectional = true;
-				mEdgeSet.erase(iter);
-			}
-			else
-			{
-
-				std::swap(cp.first, cp.second);
-				mEdgeSet.insert(std::make_pair(cp, mLogs.size()));
-				auto& p = cp.first;
-				auto& c = cp.second;
-				mLogs.emplace_back(Entry::Edge, std::move(p), std::move(c));
-				mLogs.back().mDashed = dashed;
-			}
-		}
-	}
-	void Scheduler::logProto(std::string name, u64 protoIdx, std::string label, u64 resumeCount)
-	{
-		if (mLogging)
-		{
-
-			if (label.size() == 0)
-				label = name;
-
-			std::stringstream ss;
-			ss << "    subgraph cluster_" << std::to_string(protoIdx) << " { \n"
-				<< "        style = filled;\n"
-				<< "        color = lightgrey;\n"
-				<< "        node[style = filled, color = white];\n"
-				<< "        label = \"" << label << "\";\n"
-				<< "        " << name << "_" << 0;
-
-			for (u64 i = 1; i <= resumeCount; ++i)
-				ss << " -> " << name << "_" << i;
-			if (resumeCount > 1)
-				ss << "[style=invis]";
-			ss << ";\n    }";
-
-			mLogs.emplace_back(Entry::Subgraph, ss.str());
-
-		}
-	}
-	void Scheduler::logSuspend(ProtoBase& p)
-	{
-		if(mLogging)
-			mLogs.emplace_back(Entry::Suspend, p.getName());
-
-	}
 
 	error_code Scheduler::resume(ProtoBase* proto)
 	{
-		bool eor = false;
+		//bool eor = false;
 		if (mStack.size())
 		{
 
-			auto iter = mEoRSet.find(mStack.back());
-			if (iter != mEoRSet.end()) {
-				eor = true;
-				mEoRSet.insert(proto);
-			}
+			//auto iter = mEoRSet.find(mStack.back());
+			//if (iter != mEoRSet.end()) {
+			//	eor = true;
+			//	mEoRSet.insert(proto);
+			//}
 
 			if (proto->mSlotIdx == ~0)
 				proto->mSlotIdx = mStack.back()->mSlotIdx;
@@ -87,8 +25,10 @@ namespace coproto
 
 		mStack.push_back(proto);
 
+#ifdef COPROTO_LOGGING
 		if (mPrint)
-			std::cout << "resume " << proto->getName() << (eor ? " eor" : "") << std::endl;
+			std::cout << "resume " << proto->getName()  << std::endl;
+#endif
 		auto ec = proto->resume_(*this);
 		mStack.pop_back();
 		return ec;
@@ -143,7 +83,7 @@ namespace coproto
 		if (mPrint)
 			std::cout << " ------------ eor ------------- " << std::endl;
 
-		mEoRSet.clear();
+		//mEoRSet.clear();
 		++mRoundIdx;
 
 	}
@@ -215,31 +155,32 @@ namespace coproto
 
 		if (ec == code::suspend)
 		{
+#ifdef COPROTO_LOGGING
 			if (mPrint)
 				std::cout << " ~~ next " << data.getName() << " " << data.getSlot() << std::endl;
-
+			logSuspend(data);
+#endif
 			auto iter = mSlotWaiters.find(data.getSlot());
 			assert(iter == mSlotWaiters.end());
 			mSlotWaiters.insert(std::make_pair(data.getSlot(), &data));
 		}
 		else
 		{
+#ifdef COPROTO_LOGGING
 			if (mPrint)
 				std::cout << " ~~ recv " << data.getName() << " " << data.getSlot() << std::endl;
+#endif
 		}
-
-		if (ec == code::suspend)
-			logSuspend(data);
 
 		return ec;
 	}
 
 	error_code Scheduler::send_(IoProto& data)
 	{
+#ifdef COPROTO_LOGGING
 		if (mPrint)
-		{
 			std::cout << " ~~ send " << data.getName() << " " << data.getSlot() << std::endl;
-		}
+#endif
 
 		auto d = data.asSpan();
 		if (d.size() == 0)
@@ -284,52 +225,56 @@ namespace coproto
 
 	void Scheduler::addDep(ProtoBase& downstream, ProtoBase& upstream)
 	{
-		auto uIter = mUpstream.find(&downstream);
-		if (uIter == mUpstream.end())
-		{
-			mUpstream.emplace(&downstream, SmallVec{ &upstream });
-		}
-		else
-		{
-			uIter->second.push_back(&upstream);
-		}
+		downstream.mUpstream.push_back(&upstream);
+		upstream.mDwstream.push_back(&downstream);
+		//auto uIter = mUpstream.find(&downstream);
 
-		//std::cout << "add us " << hexPtr(&upstream) << " " <<upstream.getName() << std::endl;
+		//if (uIter == mUpstream.end())
+		//{
+		//	mUpstream.emplace(&downstream, SmallVec{ &upstream });
+		//}
+		//else
+		//{
+		//	uIter.value().push_back(&upstream);
+		//}
 
-		auto dIter = mDwstream.find(&upstream);
-		if (dIter == mDwstream.end())
-		{
-			mDwstream.emplace(&upstream, SmallVec{ &downstream });
-		}
-		else
-		{
-			dIter->second.push_back(&downstream);
-		}
+		////std::cout << "add us " << hexPtr(&upstream) << " " <<upstream.getName() << std::endl;
+
+		//auto dIter = mDwstream.find(&upstream);
+		//if (dIter == mDwstream.end())
+		//{
+		//	mDwstream.emplace(&upstream, SmallVec{ &downstream });
+		//}
+		//else
+		//{
+		//	dIter.value().push_back(&downstream);
+		//}
 	}
 
 	void Scheduler::fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr)
 	{
-		assert(mUpstream.find(&upstream) == mUpstream.end() &&
-			"A Proto was marked as done but it sill has dependencies");
 
-		auto dIter = mDwstream.find(&upstream);
-		if (dIter == mDwstream.end())
-			return;
+		assert(upstream.mUpstream.size() == 0);
+		//assert(mUpstream.find(&upstream) == mUpstream.end() &&
+		//	"A Proto was marked as done but it sill has dependencies");
 
-		bool isEoR = mEoRSet.find(&upstream) != mEoRSet.end();
+		//auto dIter = mDwstream.find(&upstream);
+		//if (dIter == mDwstream.end())
+		//	return;
 
-		auto& downstreamProtos = dIter->second;
+		
+		auto& downstreamProtos = upstream.mDwstream;
 
 		// for each downstream proto
 		for (auto d : downstreamProtos)
 		{
-			auto uIter = mUpstream.find(d);
-			if (uIter == mUpstream.end()) {
-				std::cout << "coproto internal error. " LOCATION << std::endl;
-				throw RTE_LOC;
-			}
+			//auto uIter = mUpstream.find(d);
+			//if (uIter == mUpstream.end()) {
+			//	std::cout << "coproto internal error. " LOCATION << std::endl;
+			//	throw RTE_LOC;
+			//}
 
-			auto& deps = uIter->second;
+			auto& deps = d->mUpstream;
 
 			auto iter = std::find(deps.begin(), deps.end(), &upstream);
 			if (iter == deps.end()) {
@@ -337,38 +282,99 @@ namespace coproto
 				throw RTE_LOC;
 			}
 
+			
 			std::swap(*iter, deps.back());
 			deps.pop_back();
 
 			if (ec)
 				d->setError(ec, ptr);
 
-			if (isEoR)
-				mEoRSet.insert(d);
+			//if (isEoR)
+			//	mEoRSet.insert(d);
 
+#ifdef COPROTO_LOGGING
 			logEdge(upstream, *d);
-			//log(upstream.getName() + " -> " + d->getName() + ";");
+#endif
 
 			if (deps.size() == 0)
 			{
-				mUpstream.erase(uIter);
+				//mUpstream.erase(uIter);
 				scheduleReady(*d);
+			}
+
+		}
+
+		//mDwstream.erase(dIter);
+	}
+
+	//void Scheduler::setEndOfRound()
+	//{
+	//	mEoRSet.insert(mStack.back());
+	//}
+
+
+#ifdef COPROTO_LOGGING
+	void Scheduler::logEdge(ProtoBase& parent, ProtoBase& child, bool dashed)
+	{
+		if (mLogging)
+			logEdge(parent.getName(), child.getName());
+	}
+	void Scheduler::logEdge(std::string pp, std::string cc, bool dashed)
+	{
+		if (mLogging)
+		{
+
+			auto cp = std::make_pair(std::move(cc), std::move(pp));
+			auto iter = mEdgeSet.find(cp);
+
+			if (iter != mEdgeSet.end())
+			{
+				mLogs[iter->second].mBidirectional = true;
+				mEdgeSet.erase(iter);
 			}
 			else
 			{
-				for (auto dd : deps)
-				{
-					std::cout << "// " << hexPtr(dd) << " " << dd->getName() << std::endl;
-				}
+
+				std::swap(cp.first, cp.second);
+				mEdgeSet.insert(std::make_pair(cp, mLogs.size()));
+				auto& p = cp.first;
+				auto& c = cp.second;
+				mLogs.emplace_back(Entry::Edge, std::move(p), std::move(c));
+				mLogs.back().mDashed = dashed;
 			}
 		}
-
-		mDwstream.erase(dIter);
 	}
-
-	void Scheduler::setEndOfRound()
+	void Scheduler::logProto(std::string name, u64 protoIdx, std::string label, u64 resumeCount)
 	{
-		mEoRSet.insert(mStack.back());
+		if (mLogging)
+		{
+
+			if (label.size() == 0)
+				label = name;
+
+			std::stringstream ss;
+			ss << "    subgraph cluster_" << std::to_string(protoIdx) << " { \n"
+				<< "        style = filled;\n"
+				<< "        color = lightgrey;\n"
+				<< "        node[style = filled, color = white];\n"
+				<< "        label = \"" << label << "\";\n"
+				<< "        " << name << "_" << 0;
+
+			for (u64 i = 1; i <= resumeCount; ++i)
+				ss << " -> " << name << "_" << i;
+			if (resumeCount > 1)
+				ss << "[style=invis]";
+			ss << ";\n    }";
+
+			mLogs.emplace_back(Entry::Subgraph, ss.str());
+
+		}
+	}
+	void Scheduler::logSuspend(ProtoBase& p)
+	{
+		if (mLogging)
+			mLogs.emplace_back(Entry::Suspend, p.getName());
+
 	}
 
 	std::string Scheduler::getDot() const
@@ -427,4 +433,5 @@ namespace coproto
 		return ss.str();
 	}
 
+#endif
 }

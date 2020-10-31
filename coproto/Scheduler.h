@@ -7,6 +7,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <functional>
+#include "../../robin-map/include/tsl/robin_map.h"
+#include "../../robin-map/include/tsl/robin_set.h"
 namespace coproto
 {
 
@@ -45,13 +47,12 @@ namespace coproto
 	class Scheduler
 	{
 	public:
-		using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
+		//using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
 		std::list<ProtoBase*> mReady;
-		std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
 
-
-		std::unordered_set<ProtoBase*> mEoRSet;
-		std::unordered_map<u32, ProtoBase*> mSlotWaiters;
+		//std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
+		//tsl::robin_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
+		tsl::robin_map<u32, ProtoBase*> mSlotWaiters;
 
 		std::vector<ProtoBase*> mStack;
 		
@@ -63,7 +64,54 @@ namespace coproto
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
 		bool mSuspend;
-		//u64 mIsSuspended = false;
+
+
+		void runRound();
+		bool done();
+
+		
+		u32 mNextSlot = 1;
+		bool mHaveHeader = false;
+
+		u32& getHeaderSlot()
+		{
+			return ((u32*)mHeader.data())[1];
+		}
+		u32& getHeaderSize()
+		{
+			return ((u32*)mHeader.data())[0];
+		}
+
+		std::array<u8, sizeof(u64)> mHeader;
+
+		error_code recvHeader();
+
+		error_code recv(IoProto& data);
+		error_code send_(IoProto& data);
+
+		void scheduleReady(ProtoBase& proto);
+
+		void addDep(ProtoBase& downstream, ProtoBase& upstream);
+
+		void fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr);
+
+		//void setEndOfRound();
+
+
+		u64 numRounds()
+		{
+			return mRoundIdx;
+		}
+
+
+#ifdef COPROTO_LOGGING
+		void logEdge(ProtoBase& parent, ProtoBase& child, bool dashed = false);
+		void logEdge(std::string p, std::string c, bool dashed = false);
+
+		void logProto(std::string name, u64 protoIdx, std::string label, u64 resumeCount);
+
+		void logSuspend(ProtoBase& p);
+		std::string getDot()const;
 
 		struct Entry
 		{
@@ -77,7 +125,7 @@ namespace coproto
 
 			Entry(Type t, std::string&& p, std::string&& c)
 				:mParent(std::move(p))
-				,mChild(std::move(c))
+				, mChild(std::move(c))
 			{
 				mType = t;
 			}
@@ -106,62 +154,6 @@ namespace coproto
 
 		std::unordered_map<std::pair<std::string, std::string>, u64, pair_hash> mEdgeSet;
 		std::vector<Entry> mLogs;
-		//void log(std::string l)
-		//{
-		//	if (mPrint)
-		//		std::cout << l << std::endl;
-		//	mLogs.push_back(l);
-		//}
-
-		void logEdge(ProtoBase& parent, ProtoBase& child, bool dashed = false);
-		void logEdge(std::string p, std::string c, bool dashed = false);
-
-		void logProto(std::string name, u64 protoIdx, std::string label, u64 resumeCount);
-
-		void logSuspend(ProtoBase& p);
-
-		//void runOne();
-		void runRound();
-		bool done();
-
-		
-		u32 mNextSlot = 1;
-		bool mHaveHeader = false;
-
-		u32& getHeaderSlot()
-		{
-			return ((u32*)mHeader.data())[1];
-		}
-		u32& getHeaderSize()
-		{
-			return ((u32*)mHeader.data())[0];
-		}
-
-		std::array<u8, sizeof(u64)> mHeader;
-
-		error_code recvHeader();
-
-		error_code recv(IoProto& data);
-		error_code send_(IoProto& data);
-
-
-		//void scheduleNext(ProtoBase& proto);
-		void scheduleReady(ProtoBase& proto);
-
-		//error_code startSubproto(ProtoBase& downstream, ProtoBase& upstream);
-
-		void addDep(ProtoBase& downstream, ProtoBase& upstream);
-
-		void fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr);
-
-		void setEndOfRound();
-
-
-		//std::unordered_map
-		u64 numRounds()
-		{
-			return mRoundIdx;
-		}
-		std::string getDot()const;
+#endif
 	};
 }

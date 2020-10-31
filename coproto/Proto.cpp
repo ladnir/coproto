@@ -20,7 +20,9 @@ namespace coproto
 
 		RecvProto()
 		{
+#ifdef COPROTO_LOGGING
 			setName("recv_" + std::to_string(gProtoIdx++));
+#endif
 		}
 
 		span<u8> asSpan() override
@@ -72,7 +74,9 @@ namespace coproto
 		RefRecvProto(Container& t)
 			:mContainer(t)
 		{
+#ifdef COPROTO_LOGGING
 			setName("recv_" + std::to_string(gProtoIdx++));
+#endif
 		}
 
 		span<u8> asSpan() override
@@ -126,7 +130,9 @@ namespace coproto
 		RefSendProto(Container& t)
 			:mContainer(t)
 		{
+#ifdef COPROTO_LOGGING
 			setName("send_" + std::to_string(gProtoIdx++));
+#endif
 		}
 
 		span<u8> asSpan() override
@@ -181,8 +187,9 @@ namespace coproto
 		MvSendProto(Container&& t)
 			:mContainer(std::move(t))
 		{
+#ifdef COPROTO_LOGGING
 			setName("send_" + std::to_string(gProtoIdx++));
-
+#endif
 		}
 
 		span<u8> asSpan() override
@@ -335,9 +342,10 @@ namespace coproto
 
 		Proto<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
+#ifdef COPROTO_LOGGING
 			auto np = name + "_server_" + std::to_string(i) + "_" + std::to_string(length);
 			co_await Name(np);
-
+#endif
 
 			auto exp = std::vector<char>(length);
 			std::iota(exp.begin(), exp.end(), 0);
@@ -352,7 +360,9 @@ namespace coproto
 			for (u64 i = 0; i < rep; ++i)
 			{
 				auto r = recv<std::vector<char>>();
+#ifdef COPROTO_LOGGING
 				r.setName(np + "_r" + std::to_string(i));
+#endif
 				msg = co_await std::move(r);
 				//msg = co_await recv<std::vector<char>>();
 				if (exp != msg)
@@ -371,7 +381,9 @@ namespace coproto
 			for (u64 i = 0; i < rep; ++i)
 			{
 				auto s = send(msg);
+#ifdef COPROTO_LOGGING
 				s.setName(np + "_s" + std::to_string(i));
+#endif
 				co_await std::move(s);
 			}
 
@@ -385,8 +397,10 @@ namespace coproto
 		}
 		Proto<int> echoClient(u64 i, u64 length, u64 rep, std::string name , bool v )
 		{
+#ifdef COPROTO_LOGGING
 			auto np = name + "_client_" + std::to_string(i) + "_" + std::to_string(length);
 			co_await Name(np);
+#endif
 			if (v)
 				std::cout << name << " c start " << i << " " << length << std::endl;
 
@@ -397,7 +411,9 @@ namespace coproto
 			for (u64 i = 0; i < rep; ++i)
 			{
 				auto s = send(msg);
+#ifdef COPROTO_LOGGING
 				s.setName(np + "_s" + std::to_string(i));
+#endif
 				co_await std::move(s);
 			}
 			co_await EndOfRound();
@@ -409,7 +425,9 @@ namespace coproto
 			{
 
 				auto r = recv<std::vector<char>>();
+#ifdef COPROTO_LOGGING
 				r.setName(np + "_r" + std::to_string(i));
+#endif
 				auto msg2 = co_await std::move(r);
 				//auto msg2 = co_await recv<std::vector<char>>();
 				if (msg2 != msg)
@@ -836,8 +854,8 @@ namespace coproto
 
 #define MULTI
 			bool print = false;
-			u64 n = 1;
-			u64 rep = 1;
+			u64 n = 10000;
+			u64 rep = 10;
 			auto proto = [n, print,rep](bool party) -> Proto<> {
 
 				if (party)

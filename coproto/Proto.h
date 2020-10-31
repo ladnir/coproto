@@ -39,12 +39,16 @@ namespace coproto
 		ProtoBase(const ProtoBase&) = default;
 		ProtoBase(ProtoBase&&) = default;
 
+		using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
+		SmallVec mUpstream, mDwstream;
+
 		u32 mSlotIdx = ~0;
 		u32& getSlot()
 		{
 			return mSlotIdx;
 		}
 
+#ifdef COPROTO_LOGGING
 		std::string mName;
 		void setName(std::string name)
 		{
@@ -59,6 +63,7 @@ namespace coproto
 			}
 			return mName;
 		}
+#endif
 
 		virtual ~ProtoBase() {}
 		virtual error_code resume_(Scheduler& sched) = 0;
@@ -85,7 +90,13 @@ namespace coproto
 		bool await_ready()
 		{
 
-			mParent->mSched->setEndOfRound();
+			//mParent->mSched->setEndOfRound();
+			//return true;
+			if (mParent->mSched->mReady.size())
+			{
+				mParent->mSched->mReady.push_back(mParent);
+				return false;
+			}
 			return true;
 			//mParent->setError(code::suspend, nullptr);
 			//mParent->mSched->scheduleNext(*mParent);
@@ -184,10 +195,12 @@ namespace coproto
 			return {};
 		};
 
+#ifdef COPROTO_LOGGING
 		std::string getName() override
 		{
 			return mBase->getName() + "_wrap";
 		}
+#endif
 
 		void* getValue() override
 		{
@@ -295,11 +308,12 @@ namespace coproto
 			};
 
 
+#ifdef COPROTO_LOGGING
 			std::string getName() override
 			{
 				return mBase->getName() + "_join";
 			}
-
+#endif
 
 			void* getValue() override { return mBase->getValue(); };
 			void setError(error_code e, std::exception_ptr p)override {
@@ -355,12 +369,16 @@ namespace coproto
 		AsyncWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
 			: mBase(std::move(o))
 		{
+#ifdef COPROTO_LOGGING
 			mName = mBase->getName() + "_async";
+#endif
 		}
 
 		AsyncWrapper(AsyncWrapper&& o)
 			: mBase(std::move(o.mBase))
+#ifdef COPROTO_LOGGING
 			, mName(std::move(o.mName))
+#endif
 		{
 		}
 		~AsyncWrapper()
@@ -373,7 +391,9 @@ namespace coproto
 			assert(mStatus == Status::Init);
 			mStatus = Status::Done;
 
+#ifdef COPROTO_LOGGING
 			sched.logEdge(*this, *mBase.get(), true);
+#endif
 			mRet.mBase.reset(new Controller);
 			auto ptr = (Controller*)mRet.mBase.get();
 			ptr->mBase = std::move(mBase);
@@ -394,16 +414,7 @@ namespace coproto
 		void* getValue() override { return &mRet; };
 		void setError(error_code e, std::exception_ptr p)override {
 			assert(0);
-			//mEc = e;
-			//mExPtr = std::move(p);
 		}
-		//std::string getName() override
-		//{
-		//	return
-		//		(mRet.mBase ?
-		//		mRet.mBase->getName():
-		//		mBase->getName()) + "_async";
-		//}
 
 		std::exception_ptr getExpPtr() override {
 			assert(0); //return mExPtr;
@@ -464,7 +475,9 @@ namespace coproto
 
 		ProtoPromise() {
 			mProtoIdx = gProtoIdx++;
+#ifdef COPROTO_LOGGING
 			setName("Proto_" + std::to_string(mProtoIdx));
+#endif
 		}
 		~ProtoPromise() { }
 
@@ -516,7 +529,9 @@ namespace coproto
 			if (done())
 			{
 				mSched->fulfillDep(*this, mEc, mExPtr);
+#ifdef COPROTO_LOGGING
 				mSched->logProto(mName, mProtoIdx, mLabel, mResumeIdx);
+#endif
 			}
 			else
 				++mResumeIdx;
@@ -537,11 +552,12 @@ namespace coproto
 
 			return hasError() || getHandle().done();
 		}
+#ifdef COPROTO_LOGGING
 		std::string getName() override
 		{
 			return mName + "_" + std::to_string(mResumeIdx);
 		}
-
+#endif
 		void setError(error_code ec, std::exception_ptr p) override {
 			assert(!hasError());
 			mEc = ec;
@@ -589,7 +605,9 @@ namespace coproto
 
 		void setName(std::string name)
 		{
+#ifdef COPROTO_LOGGING
 			mBase->setName(name);
+#endif
 		}
 	};
 
@@ -612,10 +630,10 @@ namespace coproto
 		{
 			auto& prom = mHandle.promise();
 			auto& proto = *mTask.mBase.get();
-			//auto promName = prom.getName();
-			//auto protoName = proto.getName();
-			prom.mSched->logEdge(prom, proto);
 
+#ifdef COPROTO_LOGGING
+			prom.mSched->logEdge(prom, proto);
+#endif
 			prom.mSched->addDep(prom, proto);
 
 
@@ -664,9 +682,10 @@ namespace coproto
 
 			if (proto.done())
 			{
+#ifdef COPROTO_LOGGING
 				prom.mSched->logEdge(prom, proto);
 				prom.mSched->logEdge(proto, prom);
-
+#endif
 				return true;
 			}
 			else
@@ -719,10 +738,12 @@ namespace coproto
 		template<typename T>
 		error_code execute(Proto<T>& p0, Proto<T>& p1)
 		{
+#ifdef COPROTO_LOGGING
 			if (p0.mBase->mName.size() == 0)
 				p0.mBase->setName("main");
 			if (p1.mBase->mName.size() == 0)
 				p1.mBase->setName("main");
+#endif
 
 			//mScheds[0].mPrint = true;
 
