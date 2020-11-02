@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <numeric>
 #include <string>
-#include "cryptoTools/Common/Defines.h"
+//#include "cryptoTools/Common/Defines.h"
 namespace coproto
 {
 
@@ -367,7 +367,7 @@ namespace coproto
 				//msg = co_await recv<std::vector<char>>();
 				if (exp != msg)
 				{
-					std::cout << "bad msg " << LOCATION << std::endl;
+					std::cout << "bad msg " << COPROTO_LOCATION << std::endl;
 					throw std::runtime_error("");
 				}
 			}
@@ -432,7 +432,7 @@ namespace coproto
 				//auto msg2 = co_await recv<std::vector<char>>();
 				if (msg2 != msg)
 				{
-					std::cout << "bad msg " << LOCATION << std::endl;
+					std::cout << "bad msg " << COPROTO_LOCATION << std::endl;
 					throw std::runtime_error("");
 				}
 			}
@@ -469,7 +469,7 @@ namespace coproto
 						//std::cout << " p1 recv" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 1))
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 						str.back() += 1;
 					}
 					else
@@ -478,7 +478,7 @@ namespace coproto
 						//std::cout << " p0 recv" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						str.back() += 1;
 						co_await send(str);
@@ -525,12 +525,12 @@ namespace coproto
 						//std::cout << " p1 recv " << i << " ok " << std::endl;
 
 						if (r.hasError())
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						str = r.value();
 
 						if (str != "hello from " + std::to_string(i * 2 + 1))
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 						str.back() += 1;
 					}
 					else
@@ -540,7 +540,7 @@ namespace coproto
 						//std::cout << " p0 recv " << i << " ok" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						str.back() += 1;
 
@@ -587,7 +587,7 @@ namespace coproto
 			auto proto = [](bool party) -> Proto<> {
 
 				std::vector<u64> buff, rBuff;
-				for (oc::u64 i = 0; i < 5; ++i)
+				for (u64 i = 0; i < 5; ++i)
 				{
 					if (party)
 					{
@@ -600,7 +600,7 @@ namespace coproto
 						std::fill(buff.begin(), buff.end(), i * 2 + 1);
 
 						if (buff != rBuff)
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 					}
 					else
 					{
@@ -610,7 +610,7 @@ namespace coproto
 						std::fill(buff.begin(), buff.end(), i * 2);
 
 						if (buff != rBuff)
-							throw std::runtime_error(LOCATION);
+							throw std::runtime_error(COPROTO_LOCATION);
 
 						buff.resize(buff.size() + 1);
 						std::fill(buff.begin(), buff.end(), i * 2 + 1);
@@ -741,7 +741,7 @@ namespace coproto
 					//std::cout << "p1 send " << std::endl;
 					auto ec = co_await send(std::move(str)).wrap();
 					if (ec)
-						throw std::runtime_error(LOCATION);
+						throw std::runtime_error(COPROTO_LOCATION);
 
 					co_await echoServer(n, 10, 1, "p1", false);
 				}
@@ -752,7 +752,7 @@ namespace coproto
 					//std::cout << " p0 recv" << std::endl;
 
 					if (str != "hello from 0")
-						throw std::runtime_error(LOCATION);
+						throw std::runtime_error(COPROTO_LOCATION);
 
 					co_await echoClient(n, 10, 1, "p0", false);
 					//std::cout << " p0 sent" << std::endl;
@@ -851,6 +851,9 @@ namespace coproto
 
 		void asyncProtocolTest()
 		{
+
+			int i = 0;
+
 
 #define MULTI
 			bool print = false;

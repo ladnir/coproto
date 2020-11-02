@@ -10,6 +10,7 @@
 #include <iostream>
 #include "Result.h"
 #include <sstream>
+#include "InlineVector.h"
 //#define USE_INLINE
 
 namespace coproto
@@ -32,15 +33,14 @@ namespace coproto
 	};
 	const int inlineSize = 100;
 
-	class ProtoBase
+	class Resumable
 	{
 	public:
-		ProtoBase() = default;
-		ProtoBase(const ProtoBase&) = default;
-		ProtoBase(ProtoBase&&) = default;
+		Resumable() = default;
+		Resumable(const Resumable&) = default;
+		Resumable(Resumable&&) = default;
 
-		using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
-		SmallVec mUpstream, mDwstream;
+		internal::InlineVector<Resumable*, 4> mUpstream, mDwstream;
 
 		u32 mSlotIdx = ~0;
 		u32& getSlot()
@@ -65,7 +65,7 @@ namespace coproto
 		}
 #endif
 
-		virtual ~ProtoBase() {}
+		virtual ~Resumable() {}
 		virtual error_code resume_(Scheduler& sched) = 0;
 		virtual bool done() = 0;
 		virtual void* getValue() { return nullptr; };
@@ -75,7 +75,7 @@ namespace coproto
 	};
 
 
-	class IoProto : public ProtoBase, public BufferInterface
+	class IoProto : public Resumable, public BufferInterface
 	{};
 
 	template<typename T>
@@ -136,14 +136,14 @@ namespace coproto
 	}
 
 	template<typename T>
-	class ResultWrapper : public ProtoBase
+	class ResultWrapper : public Resumable
 	{
 	public:
 
 		using value_type = typename internal::ResultWrapperHelper<T>::type;
 		using type = Proto<value_type>;
 
-		internal::Inline<ProtoBase, inlineSize> mBase;
+		internal::InlinePoly<Resumable, inlineSize> mBase;
 
 		enum class Status
 		{
@@ -159,7 +159,7 @@ namespace coproto
 		ResultWrapper() = delete;
 		ResultWrapper(const ResultWrapper&) = delete;
 
-		ResultWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
+		ResultWrapper(internal::InlinePoly<Resumable, inlineSize>&& o)
 			: mBase(std::move(o))
 		{}
 
@@ -190,7 +190,7 @@ namespace coproto
 				sched.fulfillDep(*this, {}, nullptr);
 			}
 			else
-				assert(0 && LOCATION);
+				assert(0 && COPROTO_LOCATION);
 
 			return {};
 		};
@@ -254,9 +254,9 @@ namespace coproto
 	public:
 
 		// will return a T
-		struct Controller : public ProtoBase
+		struct Controller : public Resumable
 		{
-			internal::Inline<ProtoBase, inlineSize> mBase;
+			internal::InlinePoly<Resumable, inlineSize> mBase;
 
 			enum class Status
 			{
@@ -350,13 +350,13 @@ namespace coproto
 
 	// will return an Async<T>
 	template<typename T>
-	class AsyncWrapper : public ProtoBase
+	class AsyncWrapper : public Resumable
 	{
 	public:
 
 		using Controller = typename Async<T>::Controller;
 
-		internal::Inline<ProtoBase, inlineSize> mBase;
+		internal::InlinePoly<Resumable, inlineSize> mBase;
 		Async<T> mRet;
 
 		enum class Status
@@ -366,7 +366,7 @@ namespace coproto
 		};
 		Status mStatus = Status::Init;
 
-		AsyncWrapper(internal::Inline<ProtoBase, inlineSize>&& o)
+		AsyncWrapper(internal::InlinePoly<Resumable, inlineSize>&& o)
 			: mBase(std::move(o))
 		{
 #ifdef COPROTO_LOGGING
@@ -462,7 +462,7 @@ namespace coproto
 
 
 	template<typename T>
-	class ProtoPromise : public ProtoBase, public ReturnStorage<T>
+	class ProtoPromise : public Resumable, public ReturnStorage<T>
 	{
 	public:
 		using coro_handle = std::coroutine_handle<ProtoPromise<T>>;
@@ -585,7 +585,7 @@ namespace coproto
 	public:
 		using promise_type = ProtoPromise<T>;
 		using coro_handle = std::coroutine_handle<promise_type>;
-		internal::Inline<ProtoBase, inlineSize> mBase;
+		internal::InlinePoly<Resumable, inlineSize> mBase;
 
 		using value_type = T;
 

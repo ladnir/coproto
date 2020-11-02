@@ -1,7 +1,8 @@
-#include "Buffers.h"
+#include "InlinePoly.h"
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <array>
 
 namespace coproto
 {
@@ -111,12 +112,12 @@ namespace coproto
 
 				}
 
-				std::array<u8, 512> __;
+				std::array<u8, 512> _;
 			};
 		}
 
 
-		void SmallBufferTest()
+		void InlinePolyTest()
 		{
 
 			//Small small;
@@ -127,7 +128,7 @@ namespace coproto
 			int i = 0;
 			{
 
-				internal::Inline<Base, 256> a;
+				internal::InlinePoly<Base, 256> a;
 				a.emplace<Small>(log);
 
 				if (a.isStoredInline() == false)
@@ -140,7 +141,7 @@ namespace coproto
 				if (log.mOps[i++] != Log::ConstructSmall)
 					throw std::runtime_error("");
 
-				internal::Inline<Base, 256> b;
+				internal::InlinePoly<Base, 256> b;
 
 				b = std::move(a);
 
@@ -159,7 +160,7 @@ namespace coproto
 				if (b.isStoredInline() == false)
 					throw std::runtime_error("");
 
-				internal::Inline<Base, 256> c;
+				internal::InlinePoly<Base, 256> c;
 				c.emplace<Large>(log);
 
 				if (log.mOps.size() != 8)

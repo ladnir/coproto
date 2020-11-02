@@ -3,12 +3,9 @@
 #include "error_code.h"
 #include "Buffers.h"
 #include <list>
-#include "boost/container/small_vector.hpp"
-#include <unordered_map>
-#include <unordered_set>
+//#include "boost/container/small_vector.hpp"
 #include <functional>
-#include "../../robin-map/include/tsl/robin_map.h"
-#include "../../robin-map/include/tsl/robin_set.h"
+#include <array>
 namespace coproto
 {
 
@@ -29,7 +26,7 @@ namespace coproto
 
 	extern std::atomic<u64> gProtoIdx;
 
-	class ProtoBase;
+	class Resumable;
 	class IoProto;
 
 	struct AsyncSocket
@@ -47,19 +44,19 @@ namespace coproto
 	class Scheduler
 	{
 	public:
-		//using SmallVec = boost::container::small_vector<ProtoBase*, 4>;
-		std::list<ProtoBase*> mReady;
+		//using SmallVec = boost::container::small_vector<Resumable*, 4>;
+		std::list<Resumable*> mReady;
 
-		//std::unordered_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
-		//tsl::robin_map<ProtoBase*, SmallVec> mUpstream, mDwstream;
-		tsl::robin_map<u32, ProtoBase*> mSlotWaiters;
+		//std::unordered_map<Resumable*, SmallVec> mUpstream, mDwstream;
+		//tsl::robin_map<Resumable*, SmallVec> mUpstream, mDwstream;
+		std::unordered_map<u32, Resumable*> mSlotWaiters;
 
-		std::vector<ProtoBase*> mStack;
+		std::vector<Resumable*> mStack;
 		
 		Socket* mSock;
 		AsyncSocket* mASock;
 
-		error_code resume(ProtoBase* proto);
+		error_code resume(Resumable* proto);
 
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
@@ -89,11 +86,11 @@ namespace coproto
 		error_code recv(IoProto& data);
 		error_code send_(IoProto& data);
 
-		void scheduleReady(ProtoBase& proto);
+		void scheduleReady(Resumable& proto);
 
-		void addDep(ProtoBase& downstream, ProtoBase& upstream);
+		void addDep(Resumable& downstream, Resumable& upstream);
 
-		void fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr);
+		void fulfillDep(Resumable& upstream, error_code ec, std::exception_ptr ptr);
 
 		//void setEndOfRound();
 
@@ -105,12 +102,12 @@ namespace coproto
 
 
 #ifdef COPROTO_LOGGING
-		void logEdge(ProtoBase& parent, ProtoBase& child, bool dashed = false);
+		void logEdge(Resumable& parent, Resumable& child, bool dashed = false);
 		void logEdge(std::string p, std::string c, bool dashed = false);
 
 		void logProto(std::string name, u64 protoIdx, std::string label, u64 resumeCount);
 
-		void logSuspend(ProtoBase& p);
+		void logSuspend(Resumable& p);
 		std::string getDot()const;
 
 		struct Entry

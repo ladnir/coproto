@@ -7,7 +7,7 @@ namespace coproto
 	std::atomic<u64> gProtoIdx(0);
 
 
-	error_code Scheduler::resume(ProtoBase* proto)
+	error_code Scheduler::resume(Resumable* proto)
 	{
 		//bool eor = false;
 		if (mStack.size())
@@ -42,7 +42,7 @@ namespace coproto
 	void Scheduler::runRound()
 	{
 
-		ProtoBase* task = nullptr;
+		Resumable* task = nullptr;
 		mSuspend = false;
 
 
@@ -200,7 +200,7 @@ namespace coproto
 
 
 
-	//void Scheduler::scheduleNext(ProtoBase& proto)
+	//void Scheduler::scheduleNext(Resumable& proto)
 	//{
 
 
@@ -208,7 +208,7 @@ namespace coproto
 
 	//}
 
-	void Scheduler::scheduleReady(ProtoBase& proto)
+	void Scheduler::scheduleReady(Resumable& proto)
 	{
 		auto iter = std::find(mStack.begin(), mStack.end(), &proto);
 
@@ -217,13 +217,13 @@ namespace coproto
 
 	}
 
-	//error_code Scheduler::startSubproto(ProtoBase& parent, ProtoBase& sub)
+	//error_code Scheduler::startSubproto(Resumable& parent, Resumable& sub)
 	//{
 
 
 	//}
 
-	void Scheduler::addDep(ProtoBase& downstream, ProtoBase& upstream)
+	void Scheduler::addDep(Resumable& downstream, Resumable& upstream)
 	{
 		downstream.mUpstream.push_back(&upstream);
 		upstream.mDwstream.push_back(&downstream);
@@ -251,7 +251,7 @@ namespace coproto
 		//}
 	}
 
-	void Scheduler::fulfillDep(ProtoBase& upstream, error_code ec, std::exception_ptr ptr)
+	void Scheduler::fulfillDep(Resumable& upstream, error_code ec, std::exception_ptr ptr)
 	{
 
 		assert(upstream.mUpstream.size() == 0);
@@ -270,7 +270,7 @@ namespace coproto
 		{
 			//auto uIter = mUpstream.find(d);
 			//if (uIter == mUpstream.end()) {
-			//	std::cout << "coproto internal error. " LOCATION << std::endl;
+			//	std::cout << "coproto internal error. " COPROTO_LOCATION << std::endl;
 			//	throw RTE_LOC;
 			//}
 
@@ -278,8 +278,8 @@ namespace coproto
 
 			auto iter = std::find(deps.begin(), deps.end(), &upstream);
 			if (iter == deps.end()) {
-				std::cout << "coproto internal error. " LOCATION << std::endl;
-				throw RTE_LOC;
+				std::cout << "coproto internal error. " COPROTO_LOCATION << std::endl;
+				throw std::runtime_error(COPROTO_LOCATION);
 			}
 
 			
@@ -314,7 +314,7 @@ namespace coproto
 
 
 #ifdef COPROTO_LOGGING
-	void Scheduler::logEdge(ProtoBase& parent, ProtoBase& child, bool dashed)
+	void Scheduler::logEdge(Resumable& parent, Resumable& child, bool dashed)
 	{
 		if (mLogging)
 			logEdge(parent.getName(), child.getName());
@@ -370,7 +370,7 @@ namespace coproto
 
 		}
 	}
-	void Scheduler::logSuspend(ProtoBase& p)
+	void Scheduler::logSuspend(Resumable& p)
 	{
 		if (mLogging)
 			mLogs.emplace_back(Entry::Suspend, p.getName());

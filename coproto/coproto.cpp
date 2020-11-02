@@ -3,7 +3,7 @@
 #include "Tests.h"
 
 //#include <array>
-#include "cryptoTools/Common/CLP.h"
+//#include "cryptoTools/Common/CLP.h"
 //#include "Proto.h"
 ////#include "Task.h"
 //
@@ -257,7 +257,7 @@
 //				auto proto = [](bool party) -> Proto {
 //					std::string str("hello from 0");
 //
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -296,7 +296,7 @@
 //					for (u64 i = 0; i < base.size(); ++i)
 //						base[i] = char(i);
 //
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -340,7 +340,7 @@
 //			{
 //				auto proto = [](bool party) -> Proto {
 //
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -370,7 +370,7 @@
 //				auto proto = [](bool party) -> Proto {
 //
 //					std::vector<u64> buff, rBuff;
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -414,7 +414,7 @@
 //				auto proto = [](bool party) -> Proto {
 //
 //					std::vector<u64> buff, rBuff;
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -458,7 +458,7 @@
 //				auto proto = [](bool party) -> Proto {
 //
 //					std::vector<u64> buff, rBuff;
-//					for (oc::u64 i = 0; i < 5; ++i)
+//					for (u64 i = 0; i < 5; ++i)
 //					{
 //						if (party)
 //						{
@@ -742,12 +742,8 @@
 
 int main(int argc, char** argv)
 {
-	oc::CLP cmd(argc, argv);
 
-	if (cmd.isSet("u") == false)
-		cmd.set("u");
-
-	coproto::testCollection.runIf(cmd);
+	coproto::testCollection.runAll();
 
 
 	return 0;

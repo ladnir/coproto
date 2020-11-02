@@ -2,8 +2,12 @@
 #define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include <cstdint>
-#include <cryptoTools/Common/Defines.h>
-//#define COPROTO_LOGGING
+#include <span>
+
+#define COPRO_STRINGIZE_DETAIL(x) #x
+#define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
+#define COPROTO_LOCATION __FILE__ ":" COPRO_STRINGIZE(__LINE__)
+
 namespace coproto
 {
 
@@ -16,6 +20,6 @@ namespace coproto
     typedef uint8_t u8;
     typedef int8_t i8;
 
-    template<typename Interface> using span = gsl::span<Interface>;
+    template<typename T> using span = std::span<T>;
 
 }

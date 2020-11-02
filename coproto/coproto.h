@@ -551,7 +551,7 @@
 //				void runOne();
 //			};
 //
-//			std::array<std::list<std::vector<oc::u8>>, 2> mBuffs;
+//			std::array<std::list<std::vector<u8>>, 2> mBuffs;
 //			std::array<Sched, 2> mScheds;
 //
 //			error_code execute(Proto& p0, Proto& p1);
