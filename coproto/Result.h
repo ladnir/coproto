@@ -2,6 +2,9 @@
 #include "error_code.h"
 #include <variant>
 #include <coroutine>
+#include "Resumable.h"
+#include "InlinePoly.h"
+#include <cassert>
 
 namespace coproto
 {
@@ -191,82 +194,139 @@ namespace coproto
         {
             var() = { std::in_place_index<1>, v.mE };
         }
-
-        //struct promise_type
-        //{
-        //    std::variant<value_type, error_type> mVar;
-
-        //    Result get_return_object() {
-        //        return std::coroutine_handle<promise_type>::from_promise(*this);
-        //    }
-        //    std::suspend_never initial_suspend() { return {}; }
-        //    std::suspend_never final_suspend() noexcept { return {}; }
-        //    void unhandled_exception() {
-        //        auto exceptionPtr = std::current_exception();
-        //        if (exceptionPtr)
-        //            std::rethrow_exception(exceptionPtr);
-        //    }
-        //    void return_value(Result value) { mVar = value; };
-
-        //    struct ResultAwaiter {
-        //        Result mRes;
-
-        //        ResultAwaiter(Result&& res) : mRes(std::move(res)) {}
-
-        //        bool await_ready() { return true; }
-        //        void await_suspend(std::coroutine_handle<promise_type> coro_handle) {}
-        //        Result await_resume() {
-        //            return mRes;
-        //        }
-        //    };
-
-        //    ResultAwaiter await_transform(Result&& s) {
-        //        return ResultAwaiter(std::move(s));
-        //    }
-
-
-        //    struct ValueAwaiter {
-        //        value_type mRes;
-
-        //        ValueAwaiter(value_type&& res) : mRes(std::move(res)) {}
-
-        //        bool await_ready() { return true; }
-        //        void await_suspend(std::coroutine_handle<promise_type> coro_handle) {}
-        //        value_type await_resume() {
-        //            return mRes;
-        //        }
-        //    };
-
-        //    ValueAwaiter await_transform(value_type&& s) {
-        //        return ValueAwaiter(std::move(s));
-        //    }
-
-        //    struct ErrorAwaiter {
-        //        error_type mRes;
-
-        //        ErrorAwaiter(error_type&& res) : mRes(std::move(res)) {}
-
-        //        bool await_ready() { return true; }
-        //        void await_suspend(std::coroutine_handle<promise_type> coro_handle) {}
-        //        error_type await_resume() {
-        //            return mRes;
-        //        }
-        //    };
-
-        //    ErrorAwaiter await_transform(error_type&& s) {
-        //        return ErrorAwaiter(std::move(s));
-        //    }
-
-
-        //};
-
-        //using coro_handle = std::coroutine_handle<promise_type>;
-
-        ////private:
-        //coro_handle coroutine_handle;
-
-        //Result(coro_handle handle)
-        //    : coroutine_handle(handle)
-        //{}
     };
+
+
+
+    namespace internal
+    {
+
+        template<typename T>
+        struct ResultWrapperHelper;
+        template<>
+        struct ResultWrapperHelper<void>
+        {
+            using type = error_code;
+        };
+        template<typename T>
+        struct ResultWrapperHelper
+        {
+            using type = Result<T, error_code>;
+        };
+
+
+        template<typename T>
+        class ResultWrapper : public Resumable
+        {
+        public:
+
+            using value_type = typename internal::ResultWrapperHelper<T>::type;
+            using type = Proto<value_type>;
+
+            internal::InlinePoly<Resumable, inlineSize> mBase;
+
+            enum class Status
+            {
+                Init,
+                InProgress,
+                Done
+            };
+            Status mStatus = Status::Init;
+
+            value_type mRes = Err(make_error_code(code::success));
+            std::exception_ptr mExPtr = nullptr;
+
+            ResultWrapper() = delete;
+            ResultWrapper(const ResultWrapper&) = delete;
+
+            ResultWrapper(internal::InlinePoly<Resumable, inlineSize>&& o)
+                : mBase(std::move(o))
+            {}
+
+            ResultWrapper(ResultWrapper&& o)
+                : mBase(std::move(o.mBase))
+            {
+            }
+
+            error_code resume_(Scheduler& sched) override {
+
+                error_code ec;
+                if (mStatus == Status::Init)
+                {
+                    mStatus = Status::InProgress;
+                    assert(mBase->done() == false);
+
+                    sched.addDep(*this, *mBase.get());
+
+                    ec = sched.resume(mBase.get());
+                    if (ec == code::suspend)
+                        return ec;
+                }
+
+                if (mStatus == Status::InProgress)
+                {
+                    mStatus = Status::Done;
+                    assert(mBase->done());
+                    sched.fulfillDep(*this, {}, nullptr);
+                }
+                else
+                    assert(0 && COPROTO_LOCATION);
+
+                return {};
+            };
+
+#ifdef COPROTO_LOGGING
+            std::string getName() override
+            {
+                return mBase->getName() + "_wrap";
+            }
+#endif
+
+            void* getValue() override
+            {
+
+                if constexpr (!std::is_same_v<error_code, value_type>) {
+                    if (!mRes.error()) {
+                        auto v = (T*)mBase.get()->getValue();
+                        assert(v);
+
+                        T& vv = *v;
+                        mRes = Ok(std::move(vv));
+                    }
+                }
+
+                return &mRes;
+            }
+
+            bool done() override {
+                return mStatus == Status::Done;
+            }
+
+            void setError(error_code ec, std::exception_ptr p) override {
+                assert(ec);
+                mRes = Err(std::move(ec));
+                mExPtr = std::move(p);
+            }
+            std::exception_ptr getExpPtr() override {
+                return mExPtr;
+            }
+
+            error_code getErrorCode() override {
+                if constexpr (!std::is_same_v<error_code, value_type>)
+                {
+                    if (mRes.hasError())
+                        return mRes.error();
+                    return {};
+                }
+                else
+                {
+                    return mRes;
+                }
+            }
+        };
+
+
+
+    }
+
 }

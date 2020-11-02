@@ -1,11 +1,11 @@
 #pragma once
 #include "Defines.h"
 #include "error_code.h"
-#include "Buffers.h"
 #include <list>
-//#include "boost/container/small_vector.hpp"
 #include <functional>
 #include <array>
+
+
 namespace coproto
 {
 
@@ -31,8 +31,8 @@ namespace coproto
 
 	struct AsyncSocket
 	{
-		virtual error_code recv(BufferInterface& data, Continutation&& cont) = 0;
-		virtual error_code send(BufferInterface& data, Continutation&& cont) = 0;
+		virtual error_code recv(span<u8>& data, Continutation&& cont) = 0;
+		virtual error_code send(span<u8>& data, Continutation&& cont) = 0;
 	};
 
 	struct Socket
@@ -44,11 +44,8 @@ namespace coproto
 	class Scheduler
 	{
 	public:
-		//using SmallVec = boost::container::small_vector<Resumable*, 4>;
 		std::list<Resumable*> mReady;
 
-		//std::unordered_map<Resumable*, SmallVec> mUpstream, mDwstream;
-		//tsl::robin_map<Resumable*, SmallVec> mUpstream, mDwstream;
 		std::unordered_map<u32, Resumable*> mSlotWaiters;
 
 		std::vector<Resumable*> mStack;

@@ -1,6 +1,7 @@
 #include "Scheduler.h"
 #include "Proto.h"
 #include <sstream>
+#include "Buffers.h"
 
 namespace coproto
 {
@@ -12,12 +13,6 @@ namespace coproto
 		//bool eor = false;
 		if (mStack.size())
 		{
-
-			//auto iter = mEoRSet.find(mStack.back());
-			//if (iter != mEoRSet.end()) {
-			//	eor = true;
-			//	mEoRSet.insert(proto);
-			//}
 
 			if (proto->mSlotIdx == ~0)
 				proto->mSlotIdx = mStack.back()->mSlotIdx;

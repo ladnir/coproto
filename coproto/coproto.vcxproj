@@ -151,13 +151,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Async.h" />
     <ClInclude Include="BasicSocket.h" />
     <ClInclude Include="Buffers.h" />
-    <ClInclude Include="coproto.h" />
     <ClInclude Include="Defines.h" />
+    <ClInclude Include="EndOfRound.h" />
     <ClInclude Include="error_code.h" />
     <ClInclude Include="InlinePoly.h" />
+    <ClInclude Include="LocalScheduler.h" />
+    <ClInclude Include="Name.h" />
     <ClInclude Include="Result.h" />
+    <ClInclude Include="Resumable.h" />
     <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Proto.h" />
     <ClInclude Include="InlineVector.h" />
@@ -165,10 +169,12 @@
     <ClInclude Include="TypeTraits.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Async.cpp" />
     <ClCompile Include="BasicSocket.cpp" />
     <ClCompile Include="InlinePoly.cpp" />
-    <ClCompile Include="coproto.cpp" />
     <ClCompile Include="error_code.cpp" />
+    <ClCompile Include="LocalScheduler.cpp" />
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="InlineVector.cpp" />

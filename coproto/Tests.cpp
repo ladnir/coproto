@@ -2,7 +2,6 @@
 
 #include "Tests.h"
 
-#include "coproto.h"
 #include "Buffers.h"
 #include "Proto.h"
 #include "InlinePoly.h"

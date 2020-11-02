@@ -22,4 +22,15 @@ namespace coproto
 
     template<typename T> using span = std::span<T>;
 
+
+    template<typename T>
+    class Proto;
+
+    namespace internal
+    {
+        template<typename T>
+        class ProtoPromise;
+        const int inlineSize = 100;
+    }
+
 }
