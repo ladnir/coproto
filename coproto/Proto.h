@@ -35,17 +35,17 @@ namespace coproto
 
 		using value_type = T;
 
-		typename internal::ResultWrapper<T>::type wrap()
+		typename internal::ResultPromise<T>::type wrap()
 		{
-			typename internal::ResultWrapper<T>::type r;
-			r.mBase.emplace<internal::ResultWrapper<T>>(std::move(mBase));
+			typename internal::ResultPromise<T>::type r;
+			r.mBase.emplace<internal::ResultPromise<T>>(std::move(mBase));
 			return r;
 		}
 
 		Proto<Async<T>> async()
 		{
 			Proto<Async<T>> r;
-			r.mBase.setOwned(new internal::AsyncWrapper<T>(std::move(mBase)));
+			r.mBase.setOwned(new internal::AsyncPromise<T>(std::move(mBase)));
 			return r;
 		}
 
@@ -54,6 +54,13 @@ namespace coproto
 #ifdef COPROTO_LOGGING
 			mBase->setName(name);
 #endif
+		}
+
+
+		operator Resumable& ()
+		{
+			assert(mBase.get());
+			return *mBase.get();
 		}
 	};
 
@@ -183,9 +190,9 @@ namespace coproto
 			template<typename U>
 			ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
 			template<typename U>
-			AsyncAwaiter<U, T> await_transform(Async<U>&& p);
+			AsyncAwaiter<U> await_transform(Async<U>&& p);
 			template<typename U>
-			AsyncAwaiter<U, T> await_transform(Async<U>& p);
+			AsyncAwaiter<U> await_transform(Async<U>& p);
 			EndOfRoundAwaiter await_transform(const EndOfRound& p);
 
 			std::suspend_never await_transform(const Name& name)
@@ -268,17 +275,17 @@ namespace coproto
 
 		template<typename T>
 		template<typename U>
-		inline AsyncAwaiter<U, T> ProtoPromise<T>::await_transform(Async<U>&& p)
+		inline AsyncAwaiter<U> ProtoPromise<T>::await_transform(Async<U>&& p)
 		{
-			return AsyncAwaiter<U, T>(
+			return AsyncAwaiter<U>(
 				coro_handle::from_promise(*this),
 				std::move(p));
 		}
 		template<typename T>
 		template<typename U>
-		inline AsyncAwaiter<U, T> ProtoPromise<T>::await_transform(Async<U>& p)
+		inline AsyncAwaiter<U> ProtoPromise<T>::await_transform(Async<U>& p)
 		{
-			return AsyncAwaiter<U, T>(
+			return AsyncAwaiter<U>(
 				coro_handle::from_promise(*this),
 				std::move(p));
 		}

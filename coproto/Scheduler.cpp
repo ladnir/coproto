@@ -100,7 +100,6 @@ namespace coproto
 		if (ec)
 		{
 			mSuspend = true;
-			assert(ec == code::suspend);
 			return ec;
 		}
 
@@ -187,8 +186,9 @@ namespace coproto
 		assert(getHeaderSlot() != ~0);
 
 		auto ec = mSock->send(mHeader);
+		if (ec)
+			return ec;
 
-		assert(!ec);
 		return mSock->send(d);
 	}
 

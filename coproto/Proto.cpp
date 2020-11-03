@@ -7,7 +7,7 @@
 #include <string>
 
 #include "Buffers.h"
-#include "LocalScheduler.h"
+#include "LocalExecutor.h"
 
 namespace coproto
 {
@@ -177,19 +177,30 @@ namespace coproto
 					}
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			//std::cout << sched.mScheds[0].getDot() << std::endl;
-			//std::cout << sched.mScheds[1].getDot() << std::endl;
 
-			if (ec)
-				throw std::runtime_error(ec.message());
-			if (sched.mScheds[0].numRounds() != 6)
-				throw std::runtime_error("num round");
-			if (sched.mScheds[1].numRounds() != 6)
-				throw std::runtime_error("num round");
+
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				//std::cout << sched.mScheds[0].getDot() << std::endl;
+				//std::cout << sched.mScheds[1].getDot() << std::endl;
+
+				if (ec)
+					throw std::runtime_error(ec.message());
+
+				if (LocalExecutor::interlace)
+				{
+					if (sched.mScheds[0].numRounds() != 6)
+						throw std::runtime_error("num round");
+					if (sched.mScheds[1].numRounds() != 6)
+						throw std::runtime_error("num round");
+				}
+			}
 		}
 
 
@@ -238,13 +249,18 @@ namespace coproto
 					}
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
 
-			if (ec)
-				throw std::runtime_error(ec.message());
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+
+				if (ec)
+					throw std::runtime_error(ec.message());
+			}
 		}
 
 
@@ -255,17 +271,23 @@ namespace coproto
 				std::string str("hello from 0");
 				co_return val;
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec)
-				throw std::runtime_error(ec.message());
 
-			if (*(int*)p0.mBase->getValue() != val)
-				throw std::runtime_error("");
-			if (*(int*)p1.mBase->getValue() != val)
-				throw std::runtime_error("");
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+
+				if (ec)
+					throw std::runtime_error(ec.message());
+
+				if (*(int*)p0.mBase->getValue() != val)
+					throw std::runtime_error("");
+				if (*(int*)p1.mBase->getValue() != val)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -305,13 +327,18 @@ namespace coproto
 					}
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
 
-			if (ec)
-				throw std::runtime_error(ec.message());
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+
+				if (ec)
+					throw std::runtime_error(ec.message());
+			}
 		}
 
 
@@ -323,12 +350,17 @@ namespace coproto
 				std::vector<u64> buff;
 				co_await send(buff);
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (!ec)
-				throw std::runtime_error("");
+
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (!ec)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -348,12 +380,15 @@ namespace coproto
 					co_await recvFixedSize(buff);
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec != code::noResizeSupport)
-				throw std::runtime_error(ec.message());
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec != code::noResizeSupport)
+					throw std::runtime_error(ec.message());
+			}
 		}
 
 
@@ -367,12 +402,15 @@ namespace coproto
 				if (ec != code::sendLengthZeroMsg)
 					throw std::runtime_error("");
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec)
-				throw std::runtime_error("");
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -395,27 +433,40 @@ namespace coproto
 						throw std::runtime_error("");
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec)
-				throw std::runtime_error("");
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec)
+					throw std::runtime_error("");
+			}
 		}
 
 		void throwsTest()
 		{
 			auto proto = [](bool party) -> Proto<> {
-				throw std::runtime_error("");
 
+				if(party)
+					throw std::runtime_error("");
+				else
+				{
+					co_await recvVec<char>();
+				}
 				co_return;
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (!ec)
-				throw std::runtime_error("");
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (!ec)
+					throw std::runtime_error("");
+			}
 		}
 
 		void nestedSendRecvTest()
@@ -446,12 +497,15 @@ namespace coproto
 
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec)
-				throw std::runtime_error(ec.message());
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec)
+					throw std::runtime_error(ec.message());
+			}
 		}
 
 
@@ -465,6 +519,7 @@ namespace coproto
 			else
 				throw std::runtime_error("");
 		}
+
 		Proto<> throwClient(u64 i)
 		{
 			auto msg = std::string("hello world");
@@ -496,12 +551,16 @@ namespace coproto
 					co_await throwClient(4);
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (!ec)
-				throw std::runtime_error("");
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (!ec)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -527,12 +586,17 @@ namespace coproto
 					co_await throwClient(n);
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
-			if (ec || !hasEc)
-				throw std::runtime_error("");
+
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec || !hasEc)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -605,22 +669,27 @@ namespace coproto
 #endif
 				}
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			//sched.mScheds[0].mPrint = true;
-			//sched.mScheds[1].mPrint = true;
-
-			auto ec = sched.execute(p0, p1);
 
 
-			//std::cout << sched.mScheds[0].getDot() << std::endl;
-			//std::cout << sched.mScheds[1].getDot() << std::endl;
-			if (ec)
-				throw std::runtime_error(ec.message());
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				//sched.mScheds[0].mPrint = true;
+				//sched.mScheds[1].mPrint = true;
 
-			auto r0 = sched.mScheds[0].numRounds();
-			auto r1 = sched.mScheds[1].numRounds();
+				auto ec = sched.execute(p0, p1, t);
+
+
+				//std::cout << sched.mScheds[0].getDot() << std::endl;
+				//std::cout << sched.mScheds[1].getDot() << std::endl;
+				if (ec)
+					throw std::runtime_error(ec.message());
+
+				auto r0 = sched.mScheds[0].numRounds();
+				auto r1 = sched.mScheds[1].numRounds();
+			}
 			//if (r0 != n + 1)
 			//	throw std::runtime_error("num round");
 			//if (r1 != n)
@@ -652,15 +721,21 @@ namespace coproto
 
 					co_await fu;
 				}
+
 			};
-			auto p0 = proto(0);
-			auto p1 = proto(1);
-			LocalScheduler sched;
-			//sched.mScheds[0].mPrint = true;
-			//sched.mScheds[1].mPrint = true;
-			auto ec = sched.execute(p0, p1);
-			if (ec != code::uncaughtException)
-				throw std::runtime_error("");
+
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = proto(0);
+				auto p1 = proto(1);
+				LocalExecutor sched;
+				//sched.mScheds[0].mPrint = true;
+				//sched.mScheds[1].mPrint = true;
+				auto ec = sched.execute(p0, p1, t);
+				if (ec != code::uncaughtException)
+					throw std::runtime_error("");
+			}
 		}
 
 
@@ -691,18 +766,25 @@ namespace coproto
 				co_await recv(msg);
 			};
 
-			auto p0 = sendProto2();
-			auto p1 = recvProto2();
-			LocalScheduler sched;
-			auto ec = sched.execute(p0, p1);
+
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			{
+				auto p0 = sendProto2();
+				auto p1 = recvProto2();
+				LocalExecutor sched;
+				auto ec = sched.execute(p0, p1, t);
 
 
-			if (sched.mScheds[0].numRounds() != 2)
-				throw std::runtime_error("num round");
-			if (sched.mScheds[1].numRounds() != 1)
-				throw std::runtime_error("num round");
-			if (ec)
-				throw std::runtime_error(ec.message());
+				if (t == LocalExecutor::interlace)
+				{
+					if (sched.mScheds[0].numRounds() != 2)
+						throw std::runtime_error("num round");
+					if (sched.mScheds[1].numRounds() != 1)
+						throw std::runtime_error("num round");
+				}
+				if (ec)
+					throw std::runtime_error(ec.message());
+			}
 		}
 	}
 }

@@ -116,7 +116,7 @@ namespace coproto
 
 		// will return an Async<T>
 		template<typename T>
-		class AsyncWrapper : public Resumable
+		class AsyncPromise : public Resumable
 		{
 		public:
 
@@ -132,7 +132,7 @@ namespace coproto
 			};
 			Status mStatus = Status::Init;
 
-			AsyncWrapper(internal::InlinePoly<Resumable, internal::inlineSize>&& o)
+			AsyncPromise(internal::InlinePoly<Resumable, internal::inlineSize>&& o)
 				: mBase(std::move(o))
 			{
 #ifdef COPROTO_LOGGING
@@ -140,14 +140,14 @@ namespace coproto
 #endif
 			}
 
-			AsyncWrapper(AsyncWrapper&& o)
+			AsyncPromise(AsyncPromise&& o)
 				: mBase(std::move(o.mBase))
 #ifdef COPROTO_LOGGING
 				, mName(std::move(o.mName))
 #endif
 			{
 			}
-			~AsyncWrapper()
+			~AsyncPromise()
 			{
 				//std::cout << "~AsyncWrapper " << hexPtr(this) << std::endl;
 			}
@@ -194,12 +194,12 @@ namespace coproto
 
 
 
-		template<typename T, typename U>
+		template<typename T>
 		class AsyncAwaiter
 		{
 		public:
 			Async<T> mTask;
-			using coro_handle = std::coroutine_handle<ProtoPromise<U>>;
+			using coro_handle = std::coroutine_handle<ProtoPromise<void>>;
 			coro_handle mHandle;
 
 			AsyncAwaiter(coro_handle handle, Async<T>&& t)

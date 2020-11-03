@@ -202,25 +202,25 @@ namespace coproto
     {
 
         template<typename T>
-        struct ResultWrapperHelper;
+        struct ResultPromiseHelper;
         template<>
-        struct ResultWrapperHelper<void>
+        struct ResultPromiseHelper<void>
         {
             using type = error_code;
         };
         template<typename T>
-        struct ResultWrapperHelper
+        struct ResultPromiseHelper
         {
             using type = Result<T, error_code>;
         };
 
 
         template<typename T>
-        class ResultWrapper : public Resumable
+        class ResultPromise : public Resumable
         {
         public:
 
-            using value_type = typename internal::ResultWrapperHelper<T>::type;
+            using value_type = typename internal::ResultPromiseHelper<T>::type;
             using type = Proto<value_type>;
 
             internal::InlinePoly<Resumable, inlineSize> mBase;
@@ -236,14 +236,14 @@ namespace coproto
             value_type mRes = Err(make_error_code(code::success));
             std::exception_ptr mExPtr = nullptr;
 
-            ResultWrapper() = delete;
-            ResultWrapper(const ResultWrapper&) = delete;
+            ResultPromise() = delete;
+            ResultPromise(const ResultPromise&) = delete;
 
-            ResultWrapper(internal::InlinePoly<Resumable, inlineSize>&& o)
+            ResultPromise(internal::InlinePoly<Resumable, inlineSize>&& o)
                 : mBase(std::move(o))
             {}
 
-            ResultWrapper(ResultWrapper&& o)
+            ResultPromise(ResultPromise&& o)
                 : mBase(std::move(o.mBase))
             {
             }

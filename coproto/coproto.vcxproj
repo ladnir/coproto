@@ -158,7 +158,7 @@
     <ClInclude Include="EndOfRound.h" />
     <ClInclude Include="error_code.h" />
     <ClInclude Include="InlinePoly.h" />
-    <ClInclude Include="LocalScheduler.h" />
+    <ClInclude Include="LocalExecutor.h" />
     <ClInclude Include="Name.h" />
     <ClInclude Include="Result.h" />
     <ClInclude Include="Resumable.h" />
@@ -173,7 +173,7 @@
     <ClCompile Include="BasicSocket.cpp" />
     <ClCompile Include="InlinePoly.cpp" />
     <ClCompile Include="error_code.cpp" />
-    <ClCompile Include="LocalScheduler.cpp" />
+    <ClCompile Include="LocalExecutor.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Scheduler.cpp" />

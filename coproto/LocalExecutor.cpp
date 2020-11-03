@@ -1,4 +1,4 @@
-#include "LocalScheduler.h"
+#include "LocalExecutor.h"
 
 
 namespace coproto
@@ -6,7 +6,7 @@ namespace coproto
 
 
 
-	error_code LocalScheduler::Sock::recv(span<u8> data)
+	error_code LocalExecutor::InterlaceSock::recv(span<u8> data)
 	{
 		error_code ec;
 		if (mInbound.size())
@@ -31,7 +31,7 @@ namespace coproto
 		return ec;
 	}
 
-	error_code LocalScheduler::Sock::send(span<u8> data)
+	error_code LocalExecutor::InterlaceSock::send(span<u8> data)
 	{
 
 		//auto data = buff.asSpan();
@@ -46,5 +46,27 @@ namespace coproto
 
 
 
+
+	error_code LocalExecutor::BlockingSock::recv(span<u8> data)
+	{
+		const auto vec = mInbound.pop();
+
+		if (vec.size() == 0)
+		{
+			return code::ioError;
+		}
+
+		assert(vec.size() == data.size());
+
+		std::copy(vec.begin(), vec.end(), data.begin());
+
+		return {};
+	}
+
+	error_code LocalExecutor::BlockingSock::send(span<u8> data)
+	{
+		mOther->mInbound.emplace(data.begin(), data.end());
+		return {};
+	}
 
 }
