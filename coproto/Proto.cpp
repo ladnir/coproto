@@ -386,7 +386,7 @@ namespace coproto
 				auto p1 = proto(1);
 				LocalExecutor sched;
 				auto ec = sched.execute(p0, p1, t);
-				if (ec != code::noResizeSupport)
+				if (ec != code::badBufferSize)
 					throw std::runtime_error(ec.message());
 			}
 		}
@@ -429,7 +429,7 @@ namespace coproto
 					buff.resize(1);
 					auto ec = co_await recvFixedSize(buff).wrap();
 
-					if (ec != code::noResizeSupport)
+					if (ec != code::badBufferSize)
 						throw std::runtime_error("");
 				}
 			};
@@ -608,7 +608,7 @@ namespace coproto
 
 #define MULTI
 			bool print = false;
-			u64 n = 10000;
+			u64 n = 100;
 			u64 rep = 10;
 			auto proto = [n, print,rep](bool party) -> Proto<> {
 
@@ -626,10 +626,10 @@ namespace coproto
 					auto fu0 = co_await echoServer(n, 5, rep, name, print).async();
 
 #ifdef MULTI
-					auto fu1 = co_await echoServer(n + 2, 6, rep, name, false).async();
-					auto fu2 = co_await echoServer(n, 7, rep, name, false).async();
-					auto fu3 = co_await echoServer(n + 7, 8, rep, name, false).async();
-					auto fu4 = co_await echoServer(n, 9, rep, name, false).async();
+					auto fu1 = co_await echoServer(n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoServer(n, 7, rep, name, print).async();
+					auto fu3 = co_await echoServer(n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoServer(n, 9, rep, name, print).async();
 #endif
 
 					co_await echoClient(n, 10, rep, name, print);
@@ -652,10 +652,10 @@ namespace coproto
 					//co_await recv(buff);
 					auto fu0 = co_await echoClient(n, 5, rep, name, print).async();
 #ifdef MULTI
-					auto fu1 = co_await echoClient(n + 2, 6, rep, name, false).async();
-					auto fu2 = co_await echoClient(n, 7, rep, name, false).async();
-					auto fu3 = co_await echoClient(n + 7, 8, rep, name, false).async();
-					auto fu4 = co_await echoClient(n, 9, rep, name, false).async();
+					auto fu1 = co_await echoClient(n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoClient(n, 7, rep, name, print).async();
+					auto fu3 = co_await echoClient(n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoClient(n, 9, rep, name, print).async();
 #endif
 					co_await echoServer(n, 10, rep, name, print);
 					//co_await recv(buff);

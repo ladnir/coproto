@@ -52,57 +52,92 @@ namespace coproto
 		}
 	}
 
-	struct BufferInterface
+
+	struct SendOp
 	{
+		virtual ~SendOp() {}
 		virtual span<u8> asSpan() = 0;
-		virtual error_code tryResize(u64 size) = 0;
+
+	};
+
+	template<typename Container>
+	struct RefSendBuffer : public SendOp
+	{
+		Container& mCont;
+
+		RefSendBuffer(Container& c)
+			: mCont(c)
+		{}
+
+		RefSendBuffer(RefSendBuffer&&) = default;
+
+		span<u8> asSpan() override
+		{
+			return internal::asSpan(mCont);
+		}
+
+	}; 
+
+
+	template<typename Container>
+	struct MvSendBuffer : public SendOp
+	{
+		Container mCont;
+
+		MvSendBuffer(Container&& c)
+			:mCont(std::forward<Container>(c))
+		{}
+
+		span<u8> asSpan() override
+		{
+			return internal::asSpan(mCont);
+		}
+
 	};
 
 
-	struct Buffer
+	struct SendBuffer
 	{
-		internal::InlinePoly<BufferInterface, sizeof(u64) * 4> mStorage;
+		internal::InlinePoly<SendOp, sizeof(u64) * 8> mStorage;
 
 		span<u8> asSpan() {
 			return mStorage->asSpan();
 		}
-		error_code tryResize(u64 size) {
-			return mStorage->tryResize(size);
-		}
 	};
 
 
+	struct RecvProto : public Resumable
+	{
+		virtual span<u8> asSpan(u64 resize) = 0;
+	};
 
 
-	class IoProto : public Resumable, public BufferInterface
-	{};
+	struct SendProto : public Resumable
+	{
 
-
+		virtual SendBuffer getBuffer() = 0;
+	};
 
 	template<typename Container>
-	class RecvProto : public IoProto
+	class MoveRecvProto : public RecvProto
 	{
 	public:
 		Container mContainer;
 		error_code mEc = code::suspend;
 
-		RecvProto()
+		MoveRecvProto()
 		{
 #ifdef COPROTO_LOGGING
 			setName("recv_" + std::to_string(gProtoIdx++));
 #endif
 		}
 
-		span<u8> asSpan() override
+		span<u8> asSpan(u64 size) override
 		{
+			internal::tryResize(size, mContainer);
+
 			return internal::asSpan(mContainer);
 		}
-
-		error_code tryResize(u64 size) override
-		{
-			return internal::tryResize(size, mContainer);
-		}
-
 		error_code resume_(Scheduler& sched) override {
 			mEc = sched.recv(*this);
 
@@ -129,11 +164,12 @@ namespace coproto
 			return mEc;
 		}
 		void* getValue() override { return &mContainer; };
+
 	};
 
 
 	template<typename Container, bool allowResize = true>
-	class RefRecvProto : public IoProto
+	class RefRecvProto : public RecvProto
 	{
 	public:
 		Container& mContainer;
@@ -147,17 +183,11 @@ namespace coproto
 #endif
 		}
 
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mContainer);
-		}
-
-		error_code tryResize(u64 size) override
+		span<u8> asSpan(u64 size) override
 		{
 			if constexpr (allowResize)
-				return internal::tryResize(size, mContainer);
-			else
-				return code::noResizeSupport;
+				internal::tryResize(size, mContainer);
+			return internal::asSpan(mContainer);
 		}
 
 		error_code resume_(Scheduler& sched) override {
@@ -189,11 +219,19 @@ namespace coproto
 	};
 
 	template<typename Container>
-	class RefSendProto : public IoProto
+	class RefSendProto : public SendProto
 	{
 	public:
 		Container& mContainer;
-		error_code mEc = code::suspend;
+		error_code mEc;
+
+		enum class Status
+		{
+			Uninit,
+			Inprogress,
+			Done
+		};
+		Status mStatus = Status::Uninit;
 
 		RefSendProto(Container& t)
 			:mContainer(t)
@@ -203,24 +241,40 @@ namespace coproto
 #endif
 		}
 
-		span<u8> asSpan() override
+		SendBuffer getBuffer() 
 		{
-			return internal::asSpan(mContainer);
+			SendBuffer ret;
+
+			RefSendBuffer r(mContainer);
+			SendOp& s = r;
+
+			std::is_base_of<SendOp, RefSendBuffer<Container>>::value&&
+				std::is_constructible<RefSendBuffer<Container>, Container&>::value;
+
+			ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
+			return ret;
 		}
 
-		error_code tryResize(u64 size) override
+		error_code resume_(Scheduler& sched) override 
 		{
-			return internal::tryResize(size, mContainer);
-		}
-
-
-		error_code resume_(Scheduler& sched) override {
-			mEc = sched.send_(*this);
-
-			assert(mEc != code::suspend);
-
-			if (done())
+			if (mStatus == Status::Uninit)
 			{
+				if (mContainer.size() == 0)
+				{
+					mEc = code::sendLengthZeroMsg;
+					mStatus = Status::Done;
+					sched.fulfillDep(*this, mEc, nullptr);
+				}
+				else
+				{
+					mEc = code::suspend;
+					mStatus = Status::Inprogress;
+					sched.send_(getBuffer(), getSlot(), this);
+				}
+			}
+			else if(mStatus == Status::Inprogress)
+			{
+				mStatus = Status::Done;
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
@@ -229,7 +283,8 @@ namespace coproto
 
 
 		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendProto)");
+			mEc = ec;
+			assert(p == nullptr);
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;
@@ -240,13 +295,13 @@ namespace coproto
 		}
 
 		bool done() override {
-			return mEc != code::suspend;
+			return mStatus == Status::Done;
 		}
 	};
 
 
 	template<typename Container>
-	class MvSendProto : public IoProto
+	class MvSendProto : public SendProto
 	{
 	public:
 		Container mContainer;
@@ -260,25 +315,28 @@ namespace coproto
 #endif
 		}
 
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mContainer);
-		}
 
-		error_code tryResize(u64 size) override
+		SendBuffer getBuffer() 
 		{
-			return internal::tryResize(size, mContainer);
+			SendBuffer ret;
+			ret.mStorage.emplace<MvSendBuffer<Container>>(std::move(mContainer));
+			return ret;
 		}
 
 		error_code resume_(Scheduler& sched) override {
 
-			mEc = sched.send_(*this);
-			assert(mEc != code::suspend);
-			if (done())
+
+			if (mContainer.size() == 0)
 			{
+				mEc = code::sendLengthZeroMsg;
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
-
+			else
+			{
+				sched.send_(getBuffer(), getSlot(), nullptr);
+				mEc = code::success;
+				sched.fulfillDep(*this, mEc, nullptr);
+			}
 			return mEc;
 		}
 
@@ -337,7 +395,7 @@ namespace coproto
 	Proto<Container> recv()
 	{
 		Proto<Container> proto;
-		proto.mBase.emplace<RecvProto<Container>>();
+		proto.mBase.emplace<MoveRecvProto<Container>>();
 		return proto;
 	}
 

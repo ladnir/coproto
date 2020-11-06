@@ -76,6 +76,147 @@ namespace coproto
 		};
 
 
+		struct AsyncSock : public AsyncSocket
+		{
+
+			struct Op
+			{
+				enum Type
+				{
+					send,
+					recv,
+					sendBegin,
+					sendComplete,
+					stop
+				};
+				Type mType;
+				std::span<u8> mData;
+				Continutation mCont;
+
+				Op() = default;
+				Op(Type t, span<u8> d, Continutation&& cont)
+					: mType(t)
+					, mData(d)
+					, mCont(std::move(cont))
+				{}
+				Op(Type t, span<u8> d)
+					: mType(t)
+					, mData(d)
+				{}
+
+				Op(Type t)
+					: mType(t)
+				{}
+
+				void clear()
+				{
+					mType = stop;
+					mData = {};
+					mCont = {};
+				}
+			};
+			AsyncSock* mOther;
+			queue<Op> mWorkQueue;
+
+			std::thread mWorker;
+
+			void recv(span<u8> data, Continutation&& cont)
+			{
+				mWorkQueue.emplace(Op::recv, data, std::move(cont));
+			}
+			void send(span<u8> data, Continutation&& cont)
+			{
+				mWorkQueue.emplace(Op::send, data, std::move(cont));
+			}
+
+			void startWorker()
+			{
+				mWorker = std::thread([this]() {
+					
+					std::vector<std::vector<u8>> inboundData;
+					Op curSend;
+					Op curRecv;
+
+					auto complete = [&](span<u8> src, span<u8> dest, Continutation& cont)
+					{
+						// there is an active send op.
+						if (src.size() == dest.size())
+						{
+							std::copy(src.begin(), src.end(), dest.begin());
+							cont({}, dest.size());
+						}
+						else
+						{
+							cont(code::badBufferSize, 0);
+						}
+
+						curRecv.clear();
+						mOther->mWorkQueue.emplace(Op::sendComplete);
+					};
+
+					while (true)
+					{
+						auto op = mWorkQueue.pop();
+
+						if (op.mType == Op::send)
+						{
+							assert(!curSend.mCont);
+
+							curSend = std::move(op);
+
+							mOther->mWorkQueue.emplace(Op::sendBegin, curSend.mData);
+						}
+						else if (op.mType == Op::recv)
+						{
+							assert(!curRecv.mCont);
+
+							
+							if (curRecv.mType == Op::sendBegin)
+							{
+								// there is an active send op.
+								complete(curRecv.mData, op.mData, op.mCont);
+							}
+							else
+							{
+								curRecv = std::move(op);
+							}
+						}
+						else if (op.mType == Op::sendBegin)
+						{
+
+							if (curRecv.mType == Op::recv)
+							{
+								// there is an active recv op
+								complete(op.mData, curRecv.mData, curRecv.mCont);
+							}
+							else
+								curRecv = std::move(op);
+						}
+						else if (op.mType == Op::sendComplete)
+						{
+							assert(curSend.mCont);
+							curSend.mCont({}, curSend.mData.size());
+							curSend.clear();
+						}
+						else
+						{
+							assert(op.mType == Op::stop);
+
+							if (curSend.mCont)
+								curSend.mCont(code::ioError, 0);
+
+							if (curRecv.mCont)
+								curRecv.mCont(code::ioError, 0);
+
+							curSend.clear();
+							curRecv.clear();
+							return;
+						}
+					}
+				});
+			}
+		};
+
 		std::array<InterlaceSock, 2> mSocks;
 		std::array<BlockingSock, 2> mBlkSocks;
 		std::array<Scheduler, 2> mScheds;
@@ -117,7 +258,7 @@ namespace coproto
 
 					if (mScheds[0].done() == false)
 					{
-						mScheds[0].runRound();
+						mScheds[0].run();
 
 						if (mScheds[0].done())
 						{
@@ -133,7 +274,7 @@ namespace coproto
 
 					if (mScheds[1].done() == false)
 					{
-						mScheds[1].runRound();
+						mScheds[1].run();
 
 
 						if (mScheds[1].done())
@@ -161,7 +302,7 @@ namespace coproto
 				mBlkSocks[1].mOther = &mBlkSocks[0];
 
 				auto thrd = std::thread([&]() {
-					mScheds[0].runRound();
+					mScheds[0].run();
 
 					if (p0.getErrorCode())
 						mBlkSocks[1].mInbound.emplace();
@@ -169,7 +310,7 @@ namespace coproto
 					});
 
 
-				mScheds[1].runRound();
+				mScheds[1].run();
 
 				if (p1.getErrorCode())
 					mBlkSocks[0].mInbound.emplace();

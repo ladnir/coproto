@@ -37,23 +37,25 @@ namespace coproto
 				{
 					mBase->mSlotIdx = sched.mNextSlot++;
 
-					auto ec = sched.resume(mBase.get());
-					if (ec == code::suspend)
-					{
+
+					sched.scheduleReady(*mBase.get());
+					//auto ec = sched.resume();
+					//if (ec == code::suspend)
+					//{
 						mStatus = Status::InProgress;
 						sched.addDep(*this, *mBase.get());
-					}
-					else
-					{
-						mStatus = Status::Done;
-						assert(mBase->done());
+					//}
+					//else
+					//{
+					//	mStatus = Status::Done;
+					//	assert(mBase->done());
 
-						if (ec)
-							setError(ec, mBase->getExpPtr());
+					//	if (ec)
+					//		setError(ec, mBase->getExpPtr());
 
-						//
+					//	//
 
-					}
+					//}
 				}
 				else if (mStatus == Status::InProgress)
 				{

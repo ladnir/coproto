@@ -31,8 +31,8 @@ namespace { // anonymous namespace
                     "value_type is not a multiple of the number of bytes received. The receive buffer is incorrect.";
             case coproto::code::bufferResizedFailed:
                 return "Bad buffer size. The reciever's buffer size does not match the number of bytes sent. Resizing the buffer failed for an unkown reason.";
-            case coproto::code::noResizeSupport:
-                return "Bad buffer size. The reciever's buffer size does not match the number of bytes sent. The numberleying buffer does not support resizing.";
+            //case coproto::code::noResizeSupport:
+            //    return "Bad buffer size. The reciever's buffer size does not match the number of bytes sent. The numberleying buffer does not support resizing.";
             case coproto::code::sendLengthZeroMsg:
                 return "Sending a zero length message is not allowed.";
             case coproto::code::secuirtyViolation:

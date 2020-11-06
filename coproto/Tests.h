@@ -35,6 +35,9 @@ namespace coproto
         Result runOne(u64 idx);
         Result run(std::vector<u64> testIdxs, u64 repeatCount = 1);
         Result runAll(uint64_t repeatCount = 1);
+
+        Result run(int argc, char** argv);
+
         void list();
 
         void add(std::string name, std::function<void()> test);

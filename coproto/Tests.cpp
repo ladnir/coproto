@@ -180,6 +180,36 @@ namespace coproto
         return run(v, rp);
     }
 
+    TestCollection::Result TestCollection::run(int argc, char** argv)
+    {
+        std::vector<u64> idxs;
+        bool t = false;
+        for (u64 i = 1; i < argc; ++i)
+        {
+            if (argv[i] == std::string("-u"))
+            {
+                t = true;
+
+
+
+            }
+            else if (t)
+            {
+                std::stringstream ss(argv[i]);
+                u64 idx;
+                ss >> idx;
+                idxs.push_back(idx);
+            }
+        }
+
+        if (t && idxs.size() == 0)
+            return runAll();
+        else if (t)
+            return run(idxs);
+
+        return Result();
+    }
+
     void TestCollection::list()
     {
         int w = int(std::ceil(std::log10(mTests.size())));

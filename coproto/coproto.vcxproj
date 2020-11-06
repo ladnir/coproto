@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -152,7 +152,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Async.h" />
-    <ClInclude Include="BasicSocket.h" />
     <ClInclude Include="Buffers.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="EndOfRound.h" />
@@ -170,7 +169,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Async.cpp" />
-    <ClCompile Include="BasicSocket.cpp" />
     <ClCompile Include="InlinePoly.cpp" />
     <ClCompile Include="error_code.cpp" />
     <ClCompile Include="LocalExecutor.cpp" />

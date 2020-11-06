@@ -299,6 +299,7 @@ namespace coproto
 			if (mSched->mReady.size())
 			{
 				mSched->mReady.push_back(this);
+				mEc = code::suspend;
 				return false;
 			}
 			return true;

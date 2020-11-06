@@ -22,7 +22,7 @@ namespace coproto
 
 #ifdef COPROTO_LOGGING
 		if (mPrint)
-			std::cout << "resume " << proto->getName()  << std::endl;
+			std::cout << "resume " << proto->getName() << std::endl;
 #endif
 		auto ec = proto->resume_(*this);
 		mStack.pop_back();
@@ -34,7 +34,7 @@ namespace coproto
 	//	resume(task);
 	//	mReady.pop_front();
 	//}
-	void Scheduler::runRound()
+	void Scheduler::run()
 	{
 
 		Resumable* task = nullptr;
@@ -51,16 +51,16 @@ namespace coproto
 				auto ec = recvHeader();
 				if (!ec)
 				{
-					auto iter = mSlotWaiters.find(getHeaderSlot());
-					if (iter != mSlotWaiters.end())
+					auto iter = mRecvers.find(getHeaderSlot());
+					if (iter != mRecvers.end())
 					{
 						mReady.push_back(iter->second);
-						mSlotWaiters.erase(iter);
+						mRecvers.erase(iter);
 					}
 				}
 				else
 				{
-					
+
 					break;
 				}
 			}
@@ -69,10 +69,10 @@ namespace coproto
 			mReady.pop_front();
 			auto ec = resume(task);
 
-			if (ec && ec != code::suspend)
-			{
-				break;
-			}
+			//if (ec && ec != code::suspend)
+			//{
+			//	break;
+			//}
 		}
 
 		if (mPrint)
@@ -81,11 +81,98 @@ namespace coproto
 		//mEoRSet.clear();
 		++mRoundIdx;
 
+		if (done() && mCont)
+		{
+			mCont({});
+		}
+
 	}
 
 	bool Scheduler::done()
 	{
-		return mReady.size() == 0 && mSlotWaiters.size() == 0;
+		return mReady.size() == 0 && mRecvers.size() == 0;
+	}
+
+	void Scheduler::initAsyncRecv()
+	{
+		assert(mActiveRecv == false && mRecvers.size() > 0);
+		mActiveRecv = true;
+
+		if (mHaveHeader)
+		{
+			asyncRecvBody();
+		}
+		else
+		{
+			asyncRecvHeader();
+		}
+	}
+
+	void Scheduler::asyncRecvHeader()
+	{
+		assert(mHaveHeader == false);
+
+		mASock->recv(mHeader, [this](error_code ec, u64 bt) {
+			if (ec)
+			{
+				assert(bt == mHeader.size());
+				assert(0);
+			}
+
+			mHaveHeader = true;
+
+			asyncRecvBody();
+			});
+
+	}
+
+	void Scheduler::asyncRecvBody()
+	{
+		assert(mHaveHeader);
+
+		dispatch([this]() {
+
+			auto h = getHeaderSlot();
+			auto iter = mRecvers.find(h);
+			if (iter != mRecvers.end())
+			{
+				auto& proto = *iter->second;
+				auto data = proto.asSpan(getHeaderSize());
+
+				if (data.size() != getHeaderSize())
+				{
+					assert(0);
+				}
+
+				mASock->recv(data, [this, data](error_code ec, u64 bt) {
+
+					assert(!ec && bt == data.size());
+
+					dispatch([this]() {
+
+						auto h = getHeaderSlot();
+						auto iter = mRecvers.find(h);
+						auto& proto = *iter->second;
+						mRecvers.erase(iter);
+
+						mReady.push_back(&proto);
+
+						mHaveHeader = false;
+						mActiveRecv = false;
+
+						if (mRecvers.size())
+						{
+							initAsyncRecv();
+						}
+
+						run();
+
+						});
+					});
+			}
+			});
+
+
 	}
 
 
@@ -107,101 +194,180 @@ namespace coproto
 		return ec;
 	}
 
-	error_code Scheduler::recv(IoProto& data)
+	error_code Scheduler::recv(RecvProto& data)
 	{
 		error_code ec;
 
-		//if (mEoRSet.find(mStack.back()) == mEoRSet.end())
-		//{
 
-		ec = recvHeader();
-
-		if (!ec)
+		if (mASock)
 		{
-			auto h = getHeaderSlot();
-			if (data.getSlot() == h)
+
+			mRecvers.insert(std::make_pair(data.getSlot(), &data));
+
+			if (mActiveRecv == false)
 			{
-				auto size = data.asSpan().size();
-				if (size != getHeaderSize())
-					ec = data.tryResize(getHeaderSize());
-
-				if (ec)
-					return ec;
-
-				ec = mSock->recv(data.asSpan());
-				assert(!ec);
-
-				mHaveHeader = false;
+				initAsyncRecv();
 			}
-			else
-			{
-				ec = code::suspend;
-				auto iter = mSlotWaiters.find(h);
-				if (iter != mSlotWaiters.end())
-				{
-					auto proto = *iter;
-					mReady.push_back(proto.second);
-					mSlotWaiters.erase(iter);
-				}
-			}
-		}
+			ec = code::suspend;
 
-
-		if (ec == code::suspend)
-		{
-#ifdef COPROTO_LOGGING
-			if (mPrint)
-				std::cout << " ~~ next " << data.getName() << " " << data.getSlot() << std::endl;
-			logSuspend(data);
-#endif
-			auto iter = mSlotWaiters.find(data.getSlot());
-			assert(iter == mSlotWaiters.end());
-			mSlotWaiters.insert(std::make_pair(data.getSlot(), &data));
 		}
 		else
 		{
+
+			ec = recvHeader();
+
+			if (!ec)
+			{
+				auto h = getHeaderSlot();
+				if (data.getSlot() == h)
+				{
+					auto d = data.asSpan(getHeaderSize());
+					if (d.size() != getHeaderSize())
+						return code::badBufferSize;
+
+					ec = mSock->recv(d);
+					assert(!ec);
+
+					mHaveHeader = false;
+				}
+				else
+				{
+					ec = code::suspend;
+					auto iter = mRecvers.find(h);
+					if (iter != mRecvers.end())
+					{
+						auto proto = *iter;
+						mReady.push_back(proto.second);
+						mRecvers.erase(iter);
+					}
+				}
+			}
+
+
+			if (ec == code::suspend)
+			{
 #ifdef COPROTO_LOGGING
-			if (mPrint)
-				std::cout << " ~~ recv " << data.getName() << " " << data.getSlot() << std::endl;
+				if (mPrint)
+					std::cout << " ~~ next " << data.getName() << " " << data.getSlot() << std::endl;
+				logSuspend(data);
 #endif
+				auto iter = mRecvers.find(data.getSlot());
+				assert(iter == mRecvers.end());
+				mRecvers.insert(std::make_pair(data.getSlot(), &data));
+			}
+			else
+			{
+#ifdef COPROTO_LOGGING
+				if (mPrint)
+					std::cout << " ~~ recv " << data.getName() << " " << data.getSlot() << std::endl;
+#endif
+			}
 		}
 
 		return ec;
 	}
 
-	error_code Scheduler::send_(IoProto& data)
+	void Scheduler::send_(SendBuffer&& op, u64 slot,  Resumable* res)
 	{
 #ifdef COPROTO_LOGGING
 		if (mPrint)
 			std::cout << " ~~ send " << data.getName() << " " << data.getSlot() << std::endl;
 #endif
+		assert(slot != ~0);
 
-		auto d = data.asSpan();
-		if (d.size() == 0)
-			return code::sendLengthZeroMsg;
+		if(mSock)
+		{
+			auto data = op.asSpan();
+			if (data.size() == 0)
+				assert(0);
+				//res->setError(code::sendLengthZeroMsg, nullptr);
 
-		getHeaderSlot() = data.getSlot();
-		getHeaderSize() = d.size();
+			getHeaderSlot() = slot;
+			getHeaderSize() = data.size();
 
-		assert(getHeaderSlot() != ~0);
+			assert(getHeaderSlot() != ~0);
 
-		auto ec = mSock->send(mHeader);
-		if (ec)
-			return ec;
+			auto ec = mSock->send(mHeader);
+			assert(!ec && "Not impl");
 
-		return mSock->send(d);
+			ec = mSock->send(data);
+			assert(!ec && "Not impl");
+			
+
+			if (res)
+			{
+				res->setError(ec, nullptr);
+				resume(res);
+			}
+		}
+		else
+		{
+			mSendBuffers.emplace_back(std::move(op), slot, res);
+
+			if (mActiveSend == false)
+				initAsyncSend();
+		}
+	}
+
+	void Scheduler::initAsyncSend()
+	{
+		assert(mActiveSend == false && mSendBuffers.size());
+		mActiveSend = true;
+
+		auto data = std::get<0>(mSendBuffers.front()).asSpan();
+
+		getHeaderSlot() = std::get<1>(mSendBuffers.front());
+		getHeaderSize() = data.size();
+
+
+		mASock->send(mHeader, [this, data](error_code ec, u64 bt) {
+			
+			if (!ec)
+			{
+				mASock->send(data, [this](error_code ec, u64 bt) {
+					if (!ec)
+					{
+						auto res = std::get<2>(mSendBuffers.front());
+						if (res)
+						{
+							resume(res);
+						}
+						mSendBuffers.pop_front();
+						mActiveSend = false;
+
+						if(mSendBuffers.size())
+							initAsyncSend();
+					}
+					else
+					{
+						cancelSendQueue(ec);
+					}
+				});
+			}
+			else
+			{
+				cancelSendQueue(ec);
+			}
+		});
 	}
 
 
+	void Scheduler::cancelSendQueue(error_code ec)
+	{
+		assert(ec && ec != code::suspend);
 
+		while (mSendBuffers.size())
+		{
+			auto res = std::get<2>(mSendBuffers.front());
+			if (res)
+			{
+				res->setError(ec, nullptr);
+				resume(res);
+			}
 
-	//void Scheduler::scheduleNext(Resumable& proto)
-	//{
-
-
-	//	mNext.push_back(&proto);
-
-	//}
+			mSendBuffers.pop_front();
+		}
+	}
 
 	void Scheduler::scheduleReady(Resumable& proto)
 	{
@@ -212,11 +378,6 @@ namespace coproto
 
 	}
 
-	//error_code Scheduler::startSubproto(Resumable& parent, Resumable& sub)
-	//{
-
-
-	//}
 
 	void Scheduler::addDep(Resumable& downstream, Resumable& upstream)
 	{
@@ -257,7 +418,7 @@ namespace coproto
 		//if (dIter == mDwstream.end())
 		//	return;
 
-		
+
 		auto& downstreamProtos = upstream.mDwstream;
 
 		// for each downstream proto
@@ -277,7 +438,7 @@ namespace coproto
 				throw std::runtime_error(COPROTO_LOCATION);
 			}
 
-			
+
 			std::swap(*iter, deps.back());
 			deps.pop_back();
 

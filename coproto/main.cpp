@@ -5,7 +5,7 @@
 
 int main(int argc, char** argv)
 {
-	coproto::testCollection.runAll();
+	coproto::testCollection.run(argc, argv);
 
 	return 0;
 }

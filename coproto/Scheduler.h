@@ -11,12 +11,24 @@ namespace coproto
 
 	struct Continutation
 	{
-		std::function<void(error_code ec, u64 byte_transfered)> mFn;
+		using Func = std::function<void(error_code ec, u64 byte_transfered)>;
+		Func mFn;
 		Continutation() = default;
-		Continutation(const Continutation&) = default;
+		Continutation(const Continutation&) = delete;
 		Continutation(Continutation&&) = default;
 
+		template<typename Fn>
+			requires std::is_constructible_v<Func, Fn&&>
+		Continutation(Fn&& fn)
+			: mFn(std::forward<Fn>(fn))
+		{}
 
+		Continutation& operator=(Continutation&&) = default;
+
+		explicit operator bool()
+		{
+			return static_cast<bool>(mFn);
+		}
 
 		void operator()(error_code ec, u64 byte_transfered) const
 		{
@@ -27,12 +39,13 @@ namespace coproto
 	extern std::atomic<u64> gProtoIdx;
 
 	class Resumable;
-	class IoProto;
+	struct RecvProto;
+	struct SendBuffer;
 
 	struct AsyncSocket
 	{
-		virtual error_code recv(span<u8>& data, Continutation&& cont) = 0;
-		virtual error_code send(span<u8>& data, Continutation&& cont) = 0;
+		virtual void recv(span<u8> data, Continutation&& cont) = 0;
+		virtual void send(span<u8> data, Continutation&& cont) = 0;
 	};
 
 	struct Socket
@@ -46,12 +59,15 @@ namespace coproto
 	public:
 		std::list<Resumable*> mReady;
 
-		std::unordered_map<u32, Resumable*> mSlotWaiters;
+		std::unordered_map<u32, RecvProto*> mRecvers;
+
+		std::list<std::tuple<SendBuffer, u64, Resumable*>> mSendBuffers;
 
 		std::vector<Resumable*> mStack;
 		
-		Socket* mSock;
-		AsyncSocket* mASock;
+		Socket* mSock = nullptr;
+		AsyncSocket* mASock = nullptr;
+		std::function<void(error_code)> mCont;
 
 		error_code resume(Resumable* proto);
 
@@ -60,12 +76,26 @@ namespace coproto
 		bool mSuspend;
 
 
-		void runRound();
+		void run();
 		bool done();
 
+
+		void dispatch(std::function<void()>&& fn)
+		{
+			fn();
+		}
 		
+
+
 		u32 mNextSlot = 1;
-		bool mHaveHeader = false;
+		bool mHaveHeader = false, mActiveRecv = false, mActiveSend = false;
+
+		void initAsyncRecv();
+		void asyncRecvHeader();
+		void asyncRecvBody();
+
+
+		void initAsyncSend();
 
 		u32& getHeaderSlot()
 		{
@@ -80,8 +110,11 @@ namespace coproto
 
 		error_code recvHeader();
 
-		error_code recv(IoProto& data);
-		error_code send_(IoProto& data);
+		error_code recv(RecvProto& data);
+		void send_(SendBuffer&& op, u64 slot, Resumable* data);
+
+
+		void cancelSendQueue(error_code ec);
 
 		void scheduleReady(Resumable& proto);
 
@@ -96,6 +129,8 @@ namespace coproto
 		{
 			return mRoundIdx;
 		}
+
+
 
 
 #ifdef COPROTO_LOGGING

@@ -23,7 +23,7 @@ namespace coproto
 		// resizing the buffer failed for an unkown reason.
 		bufferResizedFailed,
 		// the numberleying buffer does not support resizing
-		noResizeSupport,
+		//noResizeSupport,
 		// The protocol has been suspended for some reason.
 
 		//endOfRound,
