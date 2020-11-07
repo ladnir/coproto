@@ -180,7 +180,7 @@ namespace coproto
 
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking/*, LocalExecutor::async */})
 			{
 
 				auto p0 = proto(0);

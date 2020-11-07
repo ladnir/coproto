@@ -5,6 +5,7 @@
 #include <functional>
 #include <array>
 
+#include "Queue.h"
 
 namespace coproto
 {
@@ -39,8 +40,8 @@ namespace coproto
 	extern std::atomic<u64> gProtoIdx;
 
 	class Resumable;
-	struct RecvProto;
 	struct SendBuffer;
+	struct RecvBuffer;
 
 	struct AsyncSocket
 	{
@@ -54,19 +55,53 @@ namespace coproto
 		virtual error_code send(span<u8> data) = 0;
 	};
 
+	class Executor
+	{
+	public:
+		virtual void dispatch(std::function<void()>&& fn) = 0;
+	};
+
+	class ThreadExecutor : public Executor
+	{
+	public:
+		BlockingQueue<std::function<void()>> mQueue;
+
+		void dispatch(std::function<void()>&& fn) override
+		{
+			mQueue.push(std::move(fn));
+		}
+
+		void run()
+		{
+			while (true)
+			{
+				auto fn = mQueue.pop();
+
+				if (fn)
+					fn();
+				else
+					return;
+			}
+		}
+	};
+
+
+
 	class Scheduler
 	{
 	public:
 		std::list<Resumable*> mReady;
 
-		std::unordered_map<u32, RecvProto*> mRecvers;
+		std::unordered_map<u32, std::tuple<RecvBuffer*, Resumable*>> mRecvBuffers;
 
-		std::list<std::tuple<SendBuffer, u64, Resumable*>> mSendBuffers;
+		std::list<std::tuple<SendBuffer, u32, Resumable*>> mSendBuffers;
 
 		std::vector<Resumable*> mStack;
 		
 		Socket* mSock = nullptr;
 		AsyncSocket* mASock = nullptr;
+		Executor* mExecutor = nullptr;
+
 		std::function<void(error_code)> mCont;
 
 		error_code resume(Resumable* proto);
@@ -80,9 +115,9 @@ namespace coproto
 		bool done();
 
 
-		void dispatch(std::function<void()>&& fn)
+		inline void dispatch(std::function<void()>&& fn)
 		{
-			fn();
+			mExecutor->dispatch(std::move(fn));
 		}
 		
 
@@ -110,8 +145,8 @@ namespace coproto
 
 		error_code recvHeader();
 
-		error_code recv(RecvProto& data);
-		void send_(SendBuffer&& op, u64 slot, Resumable* data);
+		void recv(RecvBuffer* data, u32 slot, Resumable* res);
+		void send_(SendBuffer&& op, u32 slot, Resumable* res);
 
 
 		void cancelSendQueue(error_code ec);

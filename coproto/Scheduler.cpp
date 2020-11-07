@@ -28,12 +28,7 @@ namespace coproto
 		mStack.pop_back();
 		return ec;
 	}
-	//void Scheduler::runOne()
-	//{
-	//	auto task = mReady.front();
-	//	resume(task);
-	//	mReady.pop_front();
-	//}
+
 	void Scheduler::run()
 	{
 
@@ -46,37 +41,58 @@ namespace coproto
 		{
 			if (mReady.size() == 0)
 			{
-
-				assert(mHaveHeader == false);
-				auto ec = recvHeader();
-				if (!ec)
+				if (mASock)
 				{
-					auto iter = mRecvers.find(getHeaderSlot());
-					if (iter != mRecvers.end())
-					{
-						mReady.push_back(iter->second);
-						mRecvers.erase(iter);
-					}
+					break;
 				}
 				else
 				{
+					//assert(mHaveHeader == false);
+					auto ec = recvHeader();
+					if (!ec)
+					{
+						auto iter = mRecvBuffers.find(getHeaderSlot());
+						if (iter != mRecvBuffers.end())
+						{
+							auto proto = std::get<1>(iter->second);
+							auto data = std::get<0>(iter->second)->asSpan(getHeaderSize());
 
-					break;
+							if (data.size() != getHeaderSize())
+								ec = code::badBufferSize;
+							else
+							{
+
+								if (mPrint)
+									std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body 1" << std::endl;
+
+								ec = mSock->recv(data);
+								assert(ec != code::suspend);
+
+								mHaveHeader = false;
+							}
+
+							proto->setError(ec, nullptr);
+
+							//std::cout << "ready " << hexPtr(proto) << std::endl;
+							mReady.push_back(proto);
+							mRecvBuffers.erase(iter);
+						}
+					}
+					else
+					{
+
+						break;
+					}
 				}
 			}
 
 			task = mReady.front();
 			mReady.pop_front();
 			auto ec = resume(task);
-
-			//if (ec && ec != code::suspend)
-			//{
-			//	break;
-			//}
 		}
 
 		if (mPrint)
-			std::cout << " ------------ eor ------------- " << std::endl;
+			std::cout << " ------------" << hexPtr(this) << " " << std::this_thread::get_id() << " out of work" << " ------------" << std::endl;
 
 		//mEoRSet.clear();
 		++mRoundIdx;
@@ -90,12 +106,14 @@ namespace coproto
 
 	bool Scheduler::done()
 	{
-		return mReady.size() == 0 && mRecvers.size() == 0;
+		return mReady.size() == 0 &&
+			mRecvBuffers.size() == 0 &&
+			mSendBuffers.size() == 0;
 	}
 
 	void Scheduler::initAsyncRecv()
 	{
-		assert(mActiveRecv == false && mRecvers.size() > 0);
+		assert(mActiveRecv == false && mRecvBuffers.size() > 0);
 		mActiveRecv = true;
 
 		if (mHaveHeader)
@@ -113,15 +131,20 @@ namespace coproto
 		assert(mHaveHeader == false);
 
 		mASock->recv(mHeader, [this](error_code ec, u64 bt) {
-			if (ec)
-			{
-				assert(bt == mHeader.size());
-				assert(0);
-			}
+			dispatch([this, ec, bt]() {
+				if (mPrint)
+					std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
 
-			mHaveHeader = true;
+				if (ec)
+				{
+					assert(bt == mHeader.size());
+					assert(0);
+				}
 
-			asyncRecvBody();
+				mHaveHeader = true;
+
+				asyncRecvBody();
+				});
 			});
 
 	}
@@ -133,34 +156,33 @@ namespace coproto
 		dispatch([this]() {
 
 			auto h = getHeaderSlot();
-			auto iter = mRecvers.find(h);
-			if (iter != mRecvers.end())
+			auto iter = mRecvBuffers.find(h);
+			if (iter != mRecvBuffers.end())
 			{
-				auto& proto = *iter->second;
-				auto data = proto.asSpan(getHeaderSize());
+				auto data = std::get<0>(iter->second)->asSpan(getHeaderSize());
 
-				if (data.size() != getHeaderSize())
-				{
-					assert(0);
-				}
+				assert(data.size() == getHeaderSize());
 
 				mASock->recv(data, [this, data](error_code ec, u64 bt) {
+					dispatch([this, ec, bt, data]() {
 
-					assert(!ec && bt == data.size());
+						if (mPrint)
+							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body" << std::endl;
 
-					dispatch([this]() {
+						assert(!ec && bt == data.size());
 
 						auto h = getHeaderSlot();
-						auto iter = mRecvers.find(h);
-						auto& proto = *iter->second;
-						mRecvers.erase(iter);
+						auto iter = mRecvBuffers.find(h);
+						auto proto = std::get<1>(iter->second);
+						mRecvBuffers.erase(iter);
 
-						mReady.push_back(&proto);
+						//resume(&proto);
+						mReady.push_back(proto);
 
 						mHaveHeader = false;
 						mActiveRecv = false;
 
-						if (mRecvers.size())
+						if (mRecvBuffers.size())
 						{
 							initAsyncRecv();
 						}
@@ -180,8 +202,13 @@ namespace coproto
 	{
 		if (mHaveHeader)
 		{
+			if (mPrint)
+				std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header **" << std::endl;
+
 			return {};
 		}
+		if (mPrint)
+			std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
 
 		auto ec = mSock->recv(mHeader);
 		if (ec)
@@ -194,52 +221,51 @@ namespace coproto
 		return ec;
 	}
 
-	error_code Scheduler::recv(RecvProto& data)
+	void Scheduler::recv(RecvBuffer* data, u32 slot, Resumable* res)
 	{
-		error_code ec;
-
-
 		if (mASock)
 		{
-
-			mRecvers.insert(std::make_pair(data.getSlot(), &data));
-
+			mRecvBuffers.insert(std::make_pair(slot, std::make_tuple(data, res)));
 			if (mActiveRecv == false)
 			{
 				initAsyncRecv();
 			}
-			ec = code::suspend;
-
 		}
 		else
 		{
 
+			error_code ec;
 			ec = recvHeader();
 
 			if (!ec)
 			{
 				auto h = getHeaderSlot();
-				if (data.getSlot() == h)
+				if (slot == h)
 				{
-					auto d = data.asSpan(getHeaderSize());
+					auto d = data->asSpan(getHeaderSize());
 					if (d.size() != getHeaderSize())
-						return code::badBufferSize;
+						ec = code::badBufferSize;
+					else
+					{
+						if (mPrint)
+							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body 2" << std::endl;
 
-					ec = mSock->recv(d);
-					assert(!ec);
-
-					mHaveHeader = false;
+						ec = mSock->recv(d);
+						assert(!ec);
+						mHaveHeader = false;
+					}
 				}
 				else
 				{
 					ec = code::suspend;
-					auto iter = mRecvers.find(h);
-					if (iter != mRecvers.end())
-					{
-						auto proto = *iter;
-						mReady.push_back(proto.second);
-						mRecvers.erase(iter);
-					}
+					//auto iter = mRecvBuffers.find(h);
+					//if (iter != mRecvBuffers.end())
+					//{
+					//	auto proto = std::get<1>(iter->second);
+					//	std::cout << "ready " << hexPtr(proto) << std::endl;
+					//	mReady.push_back(proto);
+					//	mRecvBuffers.erase(iter);
+					//}
 				}
 			}
 
@@ -248,42 +274,45 @@ namespace coproto
 			{
 #ifdef COPROTO_LOGGING
 				if (mPrint)
-					std::cout << " ~~ next " << data.getName() << " " << data.getSlot() << std::endl;
+					std::cout << " ~~ next " << data.getName() << " " << slot << std::endl;
 				logSuspend(data);
 #endif
-				auto iter = mRecvers.find(data.getSlot());
-				assert(iter == mRecvers.end());
-				mRecvers.insert(std::make_pair(data.getSlot(), &data));
+				auto iter = mRecvBuffers.find(slot);
+				assert(iter == mRecvBuffers.end());
+				mRecvBuffers.insert(std::make_pair(slot,std::make_tuple(data, res)));
 			}
 			else
 			{
 #ifdef COPROTO_LOGGING
 				if (mPrint)
-					std::cout << " ~~ recv " << data.getName() << " " << data.getSlot() << std::endl;
+					std::cout << " ~~ recv " << data.getName() << " " << slot << std::endl;
 #endif
-			}
-		}
 
-		return ec;
+				res->setError(ec, nullptr);
+				res->resume_(*this);
+
+			}
+
+		}
 	}
 
-	void Scheduler::send_(SendBuffer&& op, u64 slot,  Resumable* res)
+	void Scheduler::send_(SendBuffer&& op, u32 slot, Resumable* res)
 	{
 #ifdef COPROTO_LOGGING
 		if (mPrint)
-			std::cout << " ~~ send " << data.getName() << " " << data.getSlot() << std::endl;
+			std::cout << " ~~ send " << data.getName() << " " << slot << std::endl;
 #endif
 		assert(slot != ~0);
 
-		if(mSock)
+		if (mSock)
 		{
 			auto data = op.asSpan();
-			if (data.size() == 0)
-				assert(0);
-				//res->setError(code::sendLengthZeroMsg, nullptr);
+
+			assert(data.size() != 0);
+			assert(data.size() < std::numeric_limits<u32>::max());
 
 			getHeaderSlot() = slot;
-			getHeaderSize() = data.size();
+			getHeaderSize() = static_cast<u32>(data.size());
 
 			assert(getHeaderSlot() != ~0);
 
@@ -292,7 +321,7 @@ namespace coproto
 
 			ec = mSock->send(data);
 			assert(!ec && "Not impl");
-			
+
 
 			if (res)
 			{
@@ -316,39 +345,55 @@ namespace coproto
 
 		auto data = std::get<0>(mSendBuffers.front()).asSpan();
 
+		assert(data.size() != 0);
+		assert(data.size() < std::numeric_limits<u32>::max());
+
 		getHeaderSlot() = std::get<1>(mSendBuffers.front());
-		getHeaderSize() = data.size();
+		getHeaderSize() = static_cast<u32>(data.size());
 
 
 		mASock->send(mHeader, [this, data](error_code ec, u64 bt) {
-			
+
+			if (mPrint)
+				std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sent   header" << std::endl;
 			if (!ec)
 			{
 				mASock->send(data, [this](error_code ec, u64 bt) {
-					if (!ec)
-					{
-						auto res = std::get<2>(mSendBuffers.front());
-						if (res)
-						{
-							resume(res);
-						}
-						mSendBuffers.pop_front();
-						mActiveSend = false;
 
-						if(mSendBuffers.size())
-							initAsyncSend();
-					}
-					else
-					{
-						cancelSendQueue(ec);
-					}
-				});
+					dispatch([this, ec, bt]() {
+
+						if (mPrint)
+							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sent   body" << std::endl;
+
+						if (!ec)
+						{
+							auto res = std::get<2>(mSendBuffers.front());
+							if (res)
+							{
+								mReady.push_back(res);
+							}
+							mSendBuffers.pop_front();
+							mActiveSend = false;
+
+							if (mSendBuffers.size())
+								initAsyncSend();
+
+							run();
+						}
+						else
+						{
+							cancelSendQueue(ec);
+						}
+						});
+					});
 			}
 			else
 			{
-				cancelSendQueue(ec);
+				dispatch([this, ec, bt]() {
+					cancelSendQueue(ec);
+					});
 			}
-		});
+			});
 	}
 
 
@@ -362,11 +407,13 @@ namespace coproto
 			if (res)
 			{
 				res->setError(ec, nullptr);
-				resume(res);
+				mReady.push_back(res);
 			}
 
 			mSendBuffers.pop_front();
 		}
+
+		run();
 	}
 
 	void Scheduler::scheduleReady(Resumable& proto)
@@ -383,52 +430,18 @@ namespace coproto
 	{
 		downstream.mUpstream.push_back(&upstream);
 		upstream.mDwstream.push_back(&downstream);
-		//auto uIter = mUpstream.find(&downstream);
-
-		//if (uIter == mUpstream.end())
-		//{
-		//	mUpstream.emplace(&downstream, SmallVec{ &upstream });
-		//}
-		//else
-		//{
-		//	uIter.value().push_back(&upstream);
-		//}
-
-		////std::cout << "add us " << hexPtr(&upstream) << " " <<upstream.getName() << std::endl;
-
-		//auto dIter = mDwstream.find(&upstream);
-		//if (dIter == mDwstream.end())
-		//{
-		//	mDwstream.emplace(&upstream, SmallVec{ &downstream });
-		//}
-		//else
-		//{
-		//	dIter.value().push_back(&downstream);
-		//}
 	}
 
 	void Scheduler::fulfillDep(Resumable& upstream, error_code ec, std::exception_ptr ptr)
 	{
 
 		assert(upstream.mUpstream.size() == 0);
-		//assert(mUpstream.find(&upstream) == mUpstream.end() &&
-		//	"A Proto was marked as done but it sill has dependencies");
-
-		//auto dIter = mDwstream.find(&upstream);
-		//if (dIter == mDwstream.end())
-		//	return;
-
 
 		auto& downstreamProtos = upstream.mDwstream;
 
 		// for each downstream proto
 		for (auto d : downstreamProtos)
 		{
-			//auto uIter = mUpstream.find(d);
-			//if (uIter == mUpstream.end()) {
-			//	std::cout << "coproto internal error. " COPROTO_LOCATION << std::endl;
-			//	throw RTE_LOC;
-			//}
 
 			auto& deps = d->mUpstream;
 
@@ -438,36 +451,21 @@ namespace coproto
 				throw std::runtime_error(COPROTO_LOCATION);
 			}
 
-
 			std::swap(*iter, deps.back());
 			deps.pop_back();
 
 			if (ec)
 				d->setError(ec, ptr);
 
-			//if (isEoR)
-			//	mEoRSet.insert(d);
-
 #ifdef COPROTO_LOGGING
 			logEdge(upstream, *d);
 #endif
-
 			if (deps.size() == 0)
 			{
-				//mUpstream.erase(uIter);
 				scheduleReady(*d);
 			}
-
 		}
-
-		//mDwstream.erase(dIter);
 	}
-
-	//void Scheduler::setEndOfRound()
-	//{
-	//	mEoRSet.insert(mStack.back());
-	//}
-
 
 #ifdef COPROTO_LOGGING
 	void Scheduler::logEdge(Resumable& parent, Resumable& child, bool dashed)
@@ -587,7 +585,7 @@ namespace coproto
 		}
 
 		return ss.str();
-	}
+}
 
 #endif
-}
+	}

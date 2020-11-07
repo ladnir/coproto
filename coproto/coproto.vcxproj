@@ -159,6 +159,7 @@
     <ClInclude Include="InlinePoly.h" />
     <ClInclude Include="LocalExecutor.h" />
     <ClInclude Include="Name.h" />
+    <ClInclude Include="Queue.h" />
     <ClInclude Include="Result.h" />
     <ClInclude Include="Resumable.h" />
     <ClInclude Include="Scheduler.h" />
