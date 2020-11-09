@@ -17,11 +17,11 @@ namespace coproto
 		//noMessageAvailable,
 		// bad buffer size. The reciever's buffer size does not match the number of bytes sent.
 		badBufferSize,
-		// data was received over the connection and the receiver buffer was resized. However, the receive buffer
-		// value_type is not a multiple of the number of bytes received. The receive buffer is incorrect.
-		bufferResizeNotMultipleOfValueType,
-		// resizing the buffer failed for an unkown reason.
-		bufferResizedFailed,
+		//// data was received over the connection and the receiver buffer was resized. However, the receive buffer
+		//// value_type is not a multiple of the number of bytes received. The receive buffer is incorrect.
+		//bufferResizeNotMultipleOfValueType,
+		//// resizing the buffer failed for an unkown reason.
+		//bufferResizedFailed,
 		// the numberleying buffer does not support resizing
 		//noResizeSupport,
 		// The protocol has been suspended for some reason.

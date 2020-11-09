@@ -19,14 +19,14 @@ namespace coproto
 			tryResize(u64 size, Container& container)
 		{
 			if (size % sizeof(typename Container::value_type))
-				return code::bufferResizeNotMultipleOfValueType;
+				return code::badBufferSize;
 			try {
 				container.resize(size / sizeof(typename Container::value_type));
 				return {};
 			}
 			catch (...)
 			{
-				return code::bufferResizedFailed;
+				return code::badBufferSize;
 			}
 		}
 
@@ -147,7 +147,6 @@ namespace coproto
 			return internal::asSpan(mContainer);
 		}
 		error_code resume_(Scheduler& sched) override {
-			//std::cout << "resume " << hexPtr(this) << std::endl;
 
 			if (mStatus == Status::Uninit)
 			{
@@ -157,11 +156,17 @@ namespace coproto
 			else if (mStatus == Status::Inprogress)
 			{
 				mStatus = Status::Done;
-				assert(mEc != code::suspend);
+				if (mEc == code::suspend)
+					mEc = {};
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
-			return mEc;
+			if (done())
+			{
+				return mEc;
+			}
+
+			return code::suspend;
 		}
 
 		bool done() override {
@@ -169,6 +174,7 @@ namespace coproto
 		}
 
 		void setError(error_code ec, std::exception_ptr p) override {
+			assert(ec != code::suspend);
 			assert(p == nullptr && "exception_ptr not supported (MoveRecvProto)");
 			mEc = ec;
 		}
@@ -225,13 +231,20 @@ namespace coproto
 			else if (mStatus == Status::Inprogress)
 			{
 				mStatus = Status::Done;
-				assert(mEc != code::suspend);
+				if (mEc == code::suspend)
+					mEc = {};
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
-			return mEc;
+			if (done())
+			{
+				return mEc;
+			}
+
+			return code::suspend;
 		}
 		void setError(error_code ec, std::exception_ptr p) override {
+			assert(ec != code::suspend);
 			assert(p == nullptr && "exception_ptr not supported (RefRecvProto)");
 			mEc = ec;
 		}
@@ -255,13 +268,13 @@ namespace coproto
 	{
 	public:
 		Container& mContainer;
-		error_code mEc;
+		error_code mEc = code::suspend;
 
 		enum class Status
 		{
 			Uninit,
 			Inprogress,
-			Done
+			Done,
 		};
 		Status mStatus = Status::Uninit;
 
@@ -292,7 +305,6 @@ namespace coproto
 				}
 				else
 				{
-					mEc = code::suspend;
 					mStatus = Status::Inprogress;
 					sched.send_(getBuffer(), getSlot(), this);
 				}
@@ -300,16 +312,24 @@ namespace coproto
 			else if(mStatus == Status::Inprogress)
 			{
 				mStatus = Status::Done;
+				if (mEc == code::suspend)
+					mEc = {};
 				sched.fulfillDep(*this, mEc, nullptr);
 			}
 
-			return mEc;
+			if (done())
+			{
+				return mEc;
+			}
+
+			return code::suspend;
 		}
 
 
 		void setError(error_code ec, std::exception_ptr p) override {
-			mEc = ec;
+			assert(ec != code::suspend);
 			assert(p == nullptr);
+			mEc = ec;
 		}
 		std::exception_ptr getExpPtr() override {
 			return nullptr;

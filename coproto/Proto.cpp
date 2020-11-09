@@ -26,6 +26,8 @@ namespace coproto
 	namespace tests
 	{
 
+		auto types = { LocalExecutor::interlace, LocalExecutor::blocking, LocalExecutor::async, LocalExecutor::asyncThread };
+
 
 		Proto<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
@@ -80,9 +82,13 @@ namespace coproto
 				co_return co_await echoServer(i - 1, length, rep, name, v);
 			}
 			else
+			{
+				if (v)
+					std::cout << name << " ###################### s done " << i << " " << length << std::endl;
 				co_return 0;
+			}
 		}
-		Proto<int> echoClient(u64 i, u64 length, u64 rep, std::string name , bool v )
+		Proto<int> echoClient(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
 #ifdef COPROTO_LOGGING
 			auto np = name + "_client_" + std::to_string(i) + "_" + std::to_string(length);
@@ -132,13 +138,16 @@ namespace coproto
 			}
 			else
 			{
+
+				if (v)
+					std::cout << name << " ###################### c done " << i << " " << length << std::endl;
 				co_return 0;
 			}
 		}
 
 
 
-		
+
 		void strSendRecvTest()
 		{
 			auto proto = [](bool party) -> Proto<> {
@@ -149,9 +158,11 @@ namespace coproto
 					if (party)
 					{
 						co_await send(str);
+						//std::cout << " p1 sent" << std::endl;
 
 						co_await EndOfRound();
-						//std::cout << " p1 sent" << std::endl;
+						//std::cout << " p1 EOR" << std::endl;
+
 						str = co_await recv<std::string>();
 						//std::cout << " p1 recv" << std::endl;
 
@@ -169,18 +180,23 @@ namespace coproto
 
 						str.back() += 1;
 						co_await send(str);
+						//std::cout << " p0 send" << std::endl;
 
 
 						co_await EndOfRound();
-						//std::cout << " p0 sent" << std::endl;
+						//std::cout << " p0 EOR" << std::endl;
 
 					}
 				}
+
+
+				//std::cout << " p0 done" << std::endl;
+
 			};
 
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking/*, LocalExecutor::async */})
+			for (auto t : types)
 			{
 
 				auto p0 = proto(0);
@@ -251,7 +267,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -273,7 +289,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t :  types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -329,7 +345,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -352,7 +368,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -380,7 +396,7 @@ namespace coproto
 					co_await recvFixedSize(buff);
 				}
 			};
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -402,7 +418,7 @@ namespace coproto
 				if (ec != code::sendLengthZeroMsg)
 					throw std::runtime_error("");
 			};
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -422,7 +438,7 @@ namespace coproto
 
 				if (party)
 				{
-					co_await send(buff);
+					co_await send(buff).wrap();
 				}
 				else
 				{
@@ -434,14 +450,14 @@ namespace coproto
 				}
 			};
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
 				LocalExecutor sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
-					throw std::runtime_error("");
+					throw std::runtime_error(ec.message());
 			}
 		}
 
@@ -449,16 +465,17 @@ namespace coproto
 		{
 			auto proto = [](bool party) -> Proto<> {
 
-				if(party)
+				if (party)
 					throw std::runtime_error("");
 				else
 				{
-					co_await recvVec<char>();
+					throw std::runtime_error("");
+					//co_await recvVec<char>();
 				}
 				co_return;
 			};
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -497,7 +514,7 @@ namespace coproto
 
 				}
 			};
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -552,7 +569,7 @@ namespace coproto
 				}
 			};
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -588,7 +605,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -608,9 +625,9 @@ namespace coproto
 
 #define MULTI
 			bool print = false;
-			u64 n = 100;
-			u64 rep = 10;
-			auto proto = [n, print,rep](bool party) -> Proto<> {
+			u64 n = 40;
+			u64 rep = 8;
+			auto proto = [n, print, rep](bool party) -> Proto<> {
 
 				if (party)
 				{
@@ -671,7 +688,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -725,7 +742,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
@@ -767,7 +784,7 @@ namespace coproto
 			};
 
 
-			for (auto t : { LocalExecutor::interlace, LocalExecutor::blocking })
+			for (auto t : types)
 			{
 				auto p0 = sendProto2();
 				auto p1 = recvProto2();

@@ -3,10 +3,13 @@
 
 #include <cstdint>
 #include <span>
+#include <string>
 
 #define COPRO_STRINGIZE_DETAIL(x) #x
 #define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
 #define COPROTO_LOCATION __FILE__ ":" COPRO_STRINGIZE(__LINE__)
+
+//#define COPROTO_LOGGING
 
 namespace coproto
 {
@@ -25,6 +28,8 @@ namespace coproto
 
     template<typename T>
     class Proto;
+
+    std::string hexPtr(void*);
 
     namespace internal
     {

@@ -72,10 +72,10 @@ namespace coproto
 	error_code LocalExecutor::execute(Resumable& p0, Resumable& p1, Type type)
 	{
 #ifdef COPROTO_LOGGING
-		if (p0.mBase->mName.size() == 0)
-			p0.mBase->setName("main");
-		if (p1.mBase->mName.size() == 0)
-			p1.mBase->setName("main");
+		if (p0.mName.size() == 0)
+			p0.setName("main");
+		if (p1.mName.size() == 0)
+			p1.setName("main");
 #endif
 
 		p0.mSlotIdx = 0;
@@ -176,43 +176,136 @@ namespace coproto
 		}
 		else if (type == Type::async)
 		{
-			ThreadExecutor ex;
+
 			mScheds[0].mASock = &mAsyncSock[0];
 			mScheds[1].mASock = &mAsyncSock[1];
 
+			auto socketWorker = AsyncSock::Worker();
+			mAsyncSock[0].mIdx = 0;
+			mAsyncSock[1].mIdx = 1;
+			mAsyncSock[0].mWorker = &socketWorker;
+			mAsyncSock[1].mWorker = &socketWorker;
+
+			//mScheds[0].mPrint = true;
+			//mScheds[1].mPrint = true;
+
+			bool useThread = false;
+			if (useThread)
+			{
+
+				socketWorker.startThread();
+				ThreadExecutor ex;
+				mScheds[0].mExecutor = &ex;
+				mScheds[1].mExecutor = &ex;
+
+				ex.dispatch([&]() {
+					mScheds[0].run();
+					});
+				ex.dispatch([&]() {
+					mScheds[1].run();
+					});
+
+
+				bool done0 = false;
+				bool done1 = false;
+				bool done = false;
+
+				mScheds[0].mCont = [&](error_code ec) {
+
+					if (ec)
+						mAsyncSock[0].cancel();
+					else
+						mAsyncSock[0].stop();
+					if (done)
+						ex.dispatch({});
+					else
+						done = true;
+
+					done0 = true;
+				};
+				mScheds[1].mCont = [&](error_code ec) {
+
+					if (ec)
+						mAsyncSock[1].cancel();
+					else
+						mAsyncSock[1].stop();
+
+					if (done)
+						ex.dispatch({});
+					else
+						done = true;
+
+					done1 = true;
+
+				};
+
+
+				std::cout << "executor " << std::this_thread::get_id() << std::endl;
+				ex.run();
+				socketWorker.join();
+
+			}
+			else
+			{
+
+				mScheds[0].run();
+				mScheds[1].run();
+
+			}
+
+			if (p0.done() == false)
+				throw std::runtime_error(COPROTO_LOCATION);
+			if (p1.done() == false)
+				throw std::runtime_error(COPROTO_LOCATION);
+
+			auto e0 = p0.getErrorCode();
+			if (e0)
+				return e0;
+			auto e1 = p1.getErrorCode();
+			if (e1)
+				return e1;
+		}
+		else if (type == Type::asyncThread)
+		{
+
+			mScheds[0].mASock = &mAsyncSock[0];
+			mScheds[1].mASock = &mAsyncSock[1];
+
+			auto socketWorker = AsyncSock::Worker();
+			mAsyncSock[0].mIdx = 0;
+			mAsyncSock[1].mIdx = 1;
+			mAsyncSock[0].mWorker = &socketWorker;
+			mAsyncSock[1].mWorker = &socketWorker;
+
+			socketWorker.startThread();
+			ThreadExecutor ex;
 			mScheds[0].mExecutor = &ex;
 			mScheds[1].mExecutor = &ex;
 
-			mAsyncSock[0].mOther = &mAsyncSock[1];
-			mAsyncSock[1].mOther = &mAsyncSock[0];
+			ex.dispatch([&]() { mScheds[0].run(); });
+			ex.dispatch([&]() { mScheds[1].run(); });
 
-			mAsyncSock[0].startWorker();
-			mAsyncSock[1].startWorker();
 
-			mScheds[0].mPrint = true;
-			mScheds[1].mPrint = true;
+			std::array<bool, 2> done = { false, false };
+			
+			auto cc = [&](error_code ec,u64 p) {
 
-			ex.dispatch([&]() {
-				mScheds[0].run();
-				});
-			ex.dispatch([&]() {
-				mScheds[1].run();
-				});
-
-			mScheds[0].mCont = [&](error_code ec) {
-				mAsyncSock[0].mWorkQueue.emplace(AsyncSock::Op::stop);
-			};
-			mScheds[1].mCont = [&](error_code ec) {
-				mAsyncSock[1].mWorkQueue.emplace(AsyncSock::Op::stop);
+				if (ec)
+					mAsyncSock[p].cancel();
+				else
+					mAsyncSock[p].stop();
+				if (done[p^1])
+					ex.stop();
+				else
+					done[p] = true;
 			};
 
+			mScheds[0].mCont = [&](error_code ec) { cc(ec, 0); };
+			mScheds[1].mCont = [&](error_code ec) { cc(ec, 1); };
 
-			std::cout << "executor " << std::this_thread::get_id() << std::endl;
 			ex.run();
+			socketWorker.join();
 
-
-			mAsyncSock[0].mWorker.join();
-			mAsyncSock[1].mWorker.join();
 
 			if (p0.done() == false)
 				throw std::runtime_error(COPROTO_LOCATION);
@@ -232,6 +325,132 @@ namespace coproto
 		}
 
 		return {};
+	}
+
+	void LocalExecutor::AsyncSock::Worker::startThread()
+	{
+		mHasThread = true;
+
+		mThread = std::thread([this]() {
+
+			mStopped[0] = false;
+			mStopped[1] = false;
+			mCanceled = false;
+
+			while (true)
+			{
+				process(mWorkQueue.pop());
+
+				if (mStopped[0] && mStopped[1])
+					return;
+			}
+			});
+	}
+
+	void LocalExecutor::AsyncSock::Worker::completeOp(u64 i)
+	{
+		assert(mRecv[i]);
+		assert(mSend[i ^ 1]);
+		// there is an active send op.
+		if (mRecv[i].mData.size() == mSend[i ^ 1].mData.size())
+		{
+			std::copy(mSend[i ^ 1].mData.begin(), mSend[i ^ 1].mData.end(), mRecv[i].mData.begin());
+
+			auto cont0 = std::move(mRecv[i].mCont);
+			auto cont1 = std::move(mSend[i ^ 1].mCont);
+			mRecv[i] = Op{};
+			mSend[i ^ 1] = Op{};
+
+
+			cont0({}, mRecv[i].mData.size());
+			cont1({}, mRecv[i].mData.size());
+
+		}
+		else
+		{
+			cancel();
+		}
+
+	}
+
+	void LocalExecutor::AsyncSock::Worker::cancel()
+	{
+		for (u64 i : {0, 1})
+		{
+
+			if (mRecv[i])
+			{
+				auto c = std::move(mRecv[i].mCont);
+				mRecv[i] = {};
+				c(code::ioError, 0);
+			}
+
+			if (mSend[i])
+			{
+				auto c = std::move(mSend[i].mCont);
+				mSend[i] = {};
+				c(code::ioError, 0);
+			}
+		}
+
+		mCanceled = true;
+		mStopped[0] = true;
+		mStopped[1] = true;
+	}
+
+	void LocalExecutor::AsyncSock::Worker::process(Op op)
+	{
+		if (mCanceled)
+		{
+			if (op.mCont)
+				op.mCont(code::ioError, 0);
+		}
+		else
+		{
+			auto i = op.mIdx;
+			if (op.mType == Op::send)
+			{
+
+				assert(!mSend[i]);
+
+
+				//std::cout << ">>> s" << i << " send " << op.mData.size() << std::endl;
+				mSend[i] = std::move(op);
+
+
+				if (mRecv[i ^ 1])
+				{
+					completeOp(i ^ 1);
+				}
+			}
+			else if (op.mType == Op::recv)
+			{
+				assert(!mRecv[i]);
+
+				//std::cout << ">>> s" << i << " recv " << op.mData.size() << std::endl;
+				mRecv[i] = std::move(op);
+
+				if (mSend[i ^ 1])
+					completeOp(i);
+
+			}
+			else if (op.mType == Op::cancel)
+			{
+				cancel();
+			}
+			else if (op.mType == Op::stop)
+			{
+				assert(!mRecv[i]);
+				assert(!mSend[i]);
+
+				mStopped[i] = true;
+			}
+			else
+			{
+				assert(0);
+			}
+
+		}
 	}
 
 }

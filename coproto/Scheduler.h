@@ -47,6 +47,7 @@ namespace coproto
 	{
 		virtual void recv(span<u8> data, Continutation&& cont) = 0;
 		virtual void send(span<u8> data, Continutation&& cont) = 0;
+		virtual void cancel() = 0;
 	};
 
 	struct Socket
@@ -65,14 +66,24 @@ namespace coproto
 	{
 	public:
 		BlockingQueue<std::function<void()>> mQueue;
+		std::thread::id mThreadId;
 
 		void dispatch(std::function<void()>&& fn) override
 		{
-			mQueue.push(std::move(fn));
+			if (mThreadId == std::this_thread::get_id())
+				fn();
+			else
+				mQueue.push(std::move(fn));
+		}
+		void stop()
+		{
+			mQueue.emplace();
 		}
 
 		void run()
 		{
+			mThreadId = std::this_thread::get_id();
+
 			while (true)
 			{
 				auto fn = mQueue.pop();
@@ -108,6 +119,7 @@ namespace coproto
 
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
+		bool mRunning = false;
 		bool mSuspend;
 
 
@@ -117,7 +129,10 @@ namespace coproto
 
 		inline void dispatch(std::function<void()>&& fn)
 		{
-			mExecutor->dispatch(std::move(fn));
+			if (mExecutor)
+				mExecutor->dispatch(std::move(fn));
+			else
+				fn();
 		}
 		
 
@@ -132,23 +147,32 @@ namespace coproto
 
 		void initAsyncSend();
 
-		u32& getHeaderSlot()
+		u32& getSendHeaderSlot()
 		{
-			return ((u32*)mHeader.data())[1];
+			return ((u32*)mSendHeader.data())[1];
 		}
-		u32& getHeaderSize()
+		u32& getSendHeaderSize()
 		{
-			return ((u32*)mHeader.data())[0];
+			return ((u32*)mSendHeader.data())[0];
+		}		
+		
+		u32& getRecvHeaderSlot()
+		{
+			return ((u32*)mRecvHeader.data())[1];
+		}
+		u32& getRecvHeaderSize()
+		{
+			return ((u32*)mRecvHeader.data())[0];
 		}
 
-		std::array<u8, sizeof(u64)> mHeader;
+		std::array<u8, sizeof(u64)> mSendHeader, mRecvHeader;
 
 		error_code recvHeader();
 
 		void recv(RecvBuffer* data, u32 slot, Resumable* res);
 		void send_(SendBuffer&& op, u32 slot, Resumable* res);
 
-
+		void cancelRecvQueue(error_code ec);
 		void cancelSendQueue(error_code ec);
 
 		void scheduleReady(Resumable& proto);

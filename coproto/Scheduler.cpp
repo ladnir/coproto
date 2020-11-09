@@ -24,6 +24,9 @@ namespace coproto
 		if (mPrint)
 			std::cout << "resume " << proto->getName() << std::endl;
 #endif
+
+		assert(proto->mUpstream.size() == 0);
+
 		auto ec = proto->resume_(*this);
 		mStack.pop_back();
 		return ec;
@@ -33,8 +36,11 @@ namespace coproto
 	{
 
 		Resumable* task = nullptr;
-		mSuspend = false;
+		if (mRunning)
+			return;
 
+		mRunning = true;
+		mSuspend = false;
 
 
 		while (!done() && mSuspend == false)
@@ -51,19 +57,19 @@ namespace coproto
 					auto ec = recvHeader();
 					if (!ec)
 					{
-						auto iter = mRecvBuffers.find(getHeaderSlot());
+						auto iter = mRecvBuffers.find(getRecvHeaderSlot());
 						if (iter != mRecvBuffers.end())
 						{
 							auto proto = std::get<1>(iter->second);
-							auto data = std::get<0>(iter->second)->asSpan(getHeaderSize());
+							auto data = std::get<0>(iter->second)->asSpan(getRecvHeaderSize());
 
-							if (data.size() != getHeaderSize())
+							if (data.size() != getRecvHeaderSize())
 								ec = code::badBufferSize;
 							else
 							{
 
-								if (mPrint)
-									std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body 1" << std::endl;
+								//if (mPrint)
+								//	std::cout << hexPtr(this) << " recved body 1 ~ " << proto->getName() << std::endl;
 
 								ec = mSock->recv(data);
 								assert(ec != code::suspend);
@@ -97,10 +103,21 @@ namespace coproto
 		//mEoRSet.clear();
 		++mRoundIdx;
 
-		if (done() && mCont)
+		if (done())
 		{
-			mCont({});
+			if (mCont)
+			{
+				mCont({});
+				mCont = {};
+			}
+
+			if (mExecutor)
+			{
+				mExecutor = nullptr;
+			}
 		}
+
+		mRunning = false;
 
 	}
 
@@ -118,6 +135,9 @@ namespace coproto
 
 		if (mHaveHeader)
 		{
+			if (mPrint)
+				std::cout << hexPtr(this) << " recved header and resuming..." << std::endl;
+
 			asyncRecvBody();
 		}
 		else
@@ -130,20 +150,33 @@ namespace coproto
 	{
 		assert(mHaveHeader == false);
 
-		mASock->recv(mHeader, [this](error_code ec, u64 bt) {
+		//if (mPrint)
+		//	std::cout << hexPtr(this) << " recving header "  << std::endl;
+
+		mASock->recv(mRecvHeader, [this](error_code ec, u64 bt) {
 			dispatch([this, ec, bt]() {
-				if (mPrint)
-					std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
 
 				if (ec)
 				{
-					assert(bt == mHeader.size());
-					assert(0);
+					//if (mPrint)
+					//	std::cout << hexPtr(this) << " recved header error" << std::endl;
+					cancelRecvQueue(ec);
 				}
+				else
+				{
+					mHaveHeader = true;
 
-				mHaveHeader = true;
+					asyncRecvBody();
+					//auto h = getHeaderSlot();
+					//auto iter = mRecvBuffers.find(h);
+					//if (iter != mRecvBuffers.end())
+					//{
+					//}
+					//else
+					//{
 
-				asyncRecvBody();
+					//}
+				}
 				});
 			});
 
@@ -151,47 +184,73 @@ namespace coproto
 
 	void Scheduler::asyncRecvBody()
 	{
-		assert(mHaveHeader);
 
 		dispatch([this]() {
+			assert(mHaveHeader);
 
-			auto h = getHeaderSlot();
+			auto h = getRecvHeaderSlot();
 			auto iter = mRecvBuffers.find(h);
 			if (iter != mRecvBuffers.end())
 			{
-				auto data = std::get<0>(iter->second)->asSpan(getHeaderSize());
+				auto data = std::get<0>(iter->second)->asSpan(getRecvHeaderSize());
 
-				assert(data.size() == getHeaderSize());
+				if (data.size() == getRecvHeaderSize())
+				{
+					mASock->recv(data, [this](error_code ec, u64 bt) {
+						dispatch([this, ec, bt]() {
 
-				mASock->recv(data, [this, data](error_code ec, u64 bt) {
-					dispatch([this, ec, bt, data]() {
 
-						if (mPrint)
-							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body" << std::endl;
+							auto h = getRecvHeaderSlot();
+							auto iter = mRecvBuffers.find(h);
+							auto proto = std::get<1>(iter->second);
 
-						assert(!ec && bt == data.size());
+							//if (mPrint)
+							//	std::cout << hexPtr(this) << " recved body ~~ " << proto->getName() << std::endl;
 
-						auto h = getHeaderSlot();
-						auto iter = mRecvBuffers.find(h);
-						auto proto = std::get<1>(iter->second);
-						mRecvBuffers.erase(iter);
+							if (!ec)
+							{
+								mRecvBuffers.erase(iter);
 
-						//resume(&proto);
-						mReady.push_back(proto);
+								mReady.push_back(proto);
 
-						mHaveHeader = false;
-						mActiveRecv = false;
+								mHaveHeader = false;
+								mActiveRecv = false;
 
-						if (mRecvBuffers.size())
-						{
-							initAsyncRecv();
-						}
+								if (mRecvBuffers.size())
+								{
+									initAsyncRecv();
+								}
 
-						run();
+								run();
+							}
+							else
+							{
+								cancelRecvQueue(ec);
+							}
 
+							});
 						});
-					});
+				}
+				else
+				{
+
+					auto ec = code::badBufferSize;
+					auto proto = std::get<1>(iter->second);
+					mRecvBuffers.erase(iter);
+					proto->setError(ec, nullptr);
+					mReady.push_back(proto);
+					//mHaveHeader = false;
+
+					cancelRecvQueue(code::ioError);
+				}
 			}
+			else
+			{
+				mActiveRecv = false;
+				if (mPrint)
+					std::cout << hexPtr(this) << " recved header but suspend... " << h << std::endl;
+			}
+
 			});
 
 
@@ -202,15 +261,15 @@ namespace coproto
 	{
 		if (mHaveHeader)
 		{
-			if (mPrint)
-				std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header **" << std::endl;
+			//if (mPrint)
+			//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header **" << std::endl;
 
 			return {};
 		}
-		if (mPrint)
-			std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
+		//if (mPrint)
+		//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
 
-		auto ec = mSock->recv(mHeader);
+		auto ec = mSock->recv(mRecvHeader);
 		if (ec)
 		{
 			mSuspend = true;
@@ -223,8 +282,13 @@ namespace coproto
 
 	void Scheduler::recv(RecvBuffer* data, u32 slot, Resumable* res)
 	{
+		//if(mPrint)
+		//	std::cout << " @@@@@@@@@ " << hexPtr(this) << " recv "<< res->getName() << " on " << slot << std::endl;
+
 		if (mASock)
 		{
+
+			assert(mRecvBuffers.find(slot) == mRecvBuffers.end());
 			mRecvBuffers.insert(std::make_pair(slot, std::make_tuple(data, res)));
 			if (mActiveRecv == false)
 			{
@@ -239,16 +303,16 @@ namespace coproto
 
 			if (!ec)
 			{
-				auto h = getHeaderSlot();
+				auto h = getRecvHeaderSlot();
 				if (slot == h)
 				{
-					auto d = data->asSpan(getHeaderSize());
-					if (d.size() != getHeaderSize())
+					auto d = data->asSpan(getRecvHeaderSize());
+					if (d.size() != getRecvHeaderSize())
 						ec = code::badBufferSize;
 					else
 					{
-						if (mPrint)
-							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body 2" << std::endl;
+						//if (mPrint)
+						//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved body 2" << std::endl;
 
 						ec = mSock->recv(d);
 						assert(!ec);
@@ -258,14 +322,6 @@ namespace coproto
 				else
 				{
 					ec = code::suspend;
-					//auto iter = mRecvBuffers.find(h);
-					//if (iter != mRecvBuffers.end())
-					//{
-					//	auto proto = std::get<1>(iter->second);
-					//	std::cout << "ready " << hexPtr(proto) << std::endl;
-					//	mReady.push_back(proto);
-					//	mRecvBuffers.erase(iter);
-					//}
 				}
 			}
 
@@ -274,19 +330,19 @@ namespace coproto
 			{
 #ifdef COPROTO_LOGGING
 				if (mPrint)
-					std::cout << " ~~ next " << data.getName() << " " << slot << std::endl;
-				logSuspend(data);
+					std::cout << " ~~ next " << res->getName() << " " << slot << std::endl;
+				logSuspend(*res);
 #endif
 				auto iter = mRecvBuffers.find(slot);
 				assert(iter == mRecvBuffers.end());
-				mRecvBuffers.insert(std::make_pair(slot,std::make_tuple(data, res)));
+				mRecvBuffers.insert(std::make_pair(slot, std::make_tuple(data, res)));
 			}
 			else
 			{
-#ifdef COPROTO_LOGGING
-				if (mPrint)
-					std::cout << " ~~ recv " << data.getName() << " " << slot << std::endl;
-#endif
+//#ifdef COPROTO_LOGGING
+//				if (mPrint)
+//					std::cout << " ~~ recv " << res->getName() << " " << slot << std::endl;
+//#endif
 
 				res->setError(ec, nullptr);
 				res->resume_(*this);
@@ -300,8 +356,16 @@ namespace coproto
 	{
 #ifdef COPROTO_LOGGING
 		if (mPrint)
-			std::cout << " ~~ send " << data.getName() << " " << slot << std::endl;
+		{
+			if(res)
+				std::cout << " @@@@@@@@@ " << hexPtr(this) << " send " << res->getName() << " " << slot << std::endl;
+			else
+				std::cout << " @@@@@@@@@ " << hexPtr(this) << " send _____________ " << slot << std::endl;
+
+		}
 #endif
+
+
 		assert(slot != ~0);
 
 		if (mSock)
@@ -311,12 +375,12 @@ namespace coproto
 			assert(data.size() != 0);
 			assert(data.size() < std::numeric_limits<u32>::max());
 
-			getHeaderSlot() = slot;
-			getHeaderSize() = static_cast<u32>(data.size());
+			getSendHeaderSlot() = slot;
+			getSendHeaderSize() = static_cast<u32>(data.size());
 
-			assert(getHeaderSlot() != ~0);
+			assert(getSendHeaderSlot() != ~0);
 
-			auto ec = mSock->send(mHeader);
+			auto ec = mSock->send(mSendHeader);
 			assert(!ec && "Not impl");
 
 			ec = mSock->send(data);
@@ -348,26 +412,34 @@ namespace coproto
 		assert(data.size() != 0);
 		assert(data.size() < std::numeric_limits<u32>::max());
 
-		getHeaderSlot() = std::get<1>(mSendBuffers.front());
-		getHeaderSize() = static_cast<u32>(data.size());
+		getSendHeaderSlot() = std::get<1>(mSendBuffers.front());
+		getSendHeaderSize() = static_cast<u32>(data.size());
+
+		if(mPrint)
+			std::cout << "******** "<< hexPtr(this) << " init send on " << getSendHeaderSlot() << std::endl;
+
+		//if (mPrint)
+		//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sending header" << std::endl;
+		mASock->send(mSendHeader, [this, data](error_code ec, u64 bt) {
 
 
-		mASock->send(mHeader, [this, data](error_code ec, u64 bt) {
+			//dispatch([this]() {
+			//	if (mPrint)
+			//		std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sent   header" << std::endl;
+			//	});
 
-			if (mPrint)
-				std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sent   header" << std::endl;
 			if (!ec)
 			{
 				mASock->send(data, [this](error_code ec, u64 bt) {
 
 					dispatch([this, ec, bt]() {
 
-						if (mPrint)
-							std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " sent   body" << std::endl;
+						auto res = std::get<2>(mSendBuffers.front());
+						//if (mPrint && res)
+						//	std::cout << hexPtr(this) << " sent   body ~~ " << res->getName() << std::endl;
 
 						if (!ec)
 						{
-							auto res = std::get<2>(mSendBuffers.front());
 							if (res)
 							{
 								mReady.push_back(res);
@@ -397,8 +469,37 @@ namespace coproto
 	}
 
 
+	void coproto::Scheduler::cancelRecvQueue(error_code ec)
+	{
+
+		if (mPrint)
+			std::cout << hexPtr(this) << "  cancelRecvQueue(" << ec.message() << ") " << std::endl;
+		assert(ec && ec != code::suspend);
+
+		while (mRecvBuffers.size())
+		{
+			auto iter = mRecvBuffers.begin();
+			auto& op = *iter;
+
+			auto res = std::get<1>(op.second);
+			if (res)
+			{
+				res->setError(ec, nullptr);
+				mReady.push_back(res);
+			}
+
+			mRecvBuffers.erase(iter);
+		}
+
+		mASock->cancel();
+
+		run();
+	}
+
 	void Scheduler::cancelSendQueue(error_code ec)
 	{
+		if (mPrint)
+			std::cout << hexPtr(this) << "  cancelSendQueue(" << ec.message() << ") " << std::endl;
 		assert(ec && ec != code::suspend);
 
 		while (mSendBuffers.size())
@@ -412,6 +513,8 @@ namespace coproto
 
 			mSendBuffers.pop_front();
 		}
+
+		mASock->cancel();
 
 		run();
 	}
@@ -434,7 +537,7 @@ namespace coproto
 
 	void Scheduler::fulfillDep(Resumable& upstream, error_code ec, std::exception_ptr ptr)
 	{
-
+		assert(!ec || ec != code::suspend);
 		assert(upstream.mUpstream.size() == 0);
 
 		auto& downstreamProtos = upstream.mDwstream;
@@ -446,10 +549,7 @@ namespace coproto
 			auto& deps = d->mUpstream;
 
 			auto iter = std::find(deps.begin(), deps.end(), &upstream);
-			if (iter == deps.end()) {
-				std::cout << "coproto internal error. " COPROTO_LOCATION << std::endl;
-				throw std::runtime_error(COPROTO_LOCATION);
-			}
+			assert(iter != deps.end() && "coproto internal error");
 
 			std::swap(*iter, deps.back());
 			deps.pop_back();
@@ -585,7 +685,7 @@ namespace coproto
 		}
 
 		return ss.str();
-}
+	}
 
 #endif
-	}
+}

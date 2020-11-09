@@ -18,7 +18,8 @@ namespace coproto
 		{
 			interlace,
 			blocking,
-			async
+			async,
+			asyncThread
 		};
 
 		struct InterlaceSock : public Socket
@@ -42,143 +43,104 @@ namespace coproto
 
 		struct AsyncSock : public AsyncSocket
 		{
-
 			struct Op
 			{
 				enum Type
 				{
 					send,
 					recv,
-					sendBegin,
-					sendComplete,
-					stop
+					stop,
+					cancel
 				};
+				u64 mIdx = ~0ull;
 				Type mType;
 				std::span<u8> mData;
 				Continutation mCont;
 
 				Op() = default;
-				Op(Type t, span<u8> d, Continutation&& cont)
-					: mType(t)
+				Op(u64 i, Type t, span<u8> d, Continutation&& cont)
+					: mIdx(i)
+					, mType(t)
 					, mData(d)
 					, mCont(std::move(cont))
 				{}
-				Op(Type t, span<u8> d)
-					: mType(t)
+				Op(u64 i, Type t, span<u8> d)
+					: mIdx(i)
+					, mType(t)
 					, mData(d)
 				{}
 
-				Op(Type t)
-					: mType(t)
+				Op(u64 i, Type t)
+					: mIdx(i)
+					, mType(t)
 				{}
 
-				void clear()
+				operator bool() const
 				{
-					mType = stop;
-					mData = {};
-					mCont = {};
+					return mIdx != ~0ull;
 				}
 			};
-			AsyncSock* mOther;
-			BlockingQueue<Op> mWorkQueue;
 
-			std::thread mWorker;
-
-			void recv(span<u8> data, Continutation&& cont)
+			struct Worker
 			{
-				mWorkQueue.emplace(Op::recv, data, std::move(cont));
+				BlockingQueue<Op> mWorkQueue;
+
+				bool mHasThread=false;
+				std::thread mThread;
+
+				std::array<Op, 2> mSend, mRecv;
+				std::array<bool, 2> mStopped;
+				bool mCanceled;
+
+				void startThread();
+
+				void completeOp(u64 i);
+				void cancel();
+
+				void process(Op op);
+
+				void join()
+				{
+					if(mHasThread)
+						mThread.join();
+				}
+			};
+
+			Worker* mWorker = nullptr;
+			u64 mIdx;
+
+			void recv(span<u8> data, Continutation&& cont) override
+			{
+				assert(mWorker != nullptr);
+				enqueue({ mIdx, Op::recv, data, std::move(cont) });
 			}
-			void send(span<u8> data, Continutation&& cont)
+			void send(span<u8> data, Continutation&& cont) override
 			{
-				mWorkQueue.emplace(Op::send, data, std::move(cont));
+				assert(mWorker != nullptr);
+				enqueue({ mIdx, Op::send, data, std::move(cont) });
 			}
 
-			void startWorker()
+			void cancel() override
 			{
-				mWorker = std::thread([this]() {
-					
-					std::vector<std::vector<u8>> inboundData;
-					Op curSend;
-					Op curRecv;
+				assert(mWorker != nullptr);
+				enqueue({ mIdx, Op::cancel });
+			}
 
-					auto complete = [&](span<u8> src, span<u8> dest, Continutation& cont)
-					{
-						// there is an active send op.
-						if (src.size() == dest.size())
-						{
-							std::copy(src.begin(), src.end(), dest.begin());
-							cont({}, dest.size());
-						}
-						else
-						{
-							cont(code::badBufferSize, 0);
-						}
+			void stop()
+			{
+				assert(mWorker != nullptr);
+				enqueue({ mIdx, Op::stop });
+			}
 
-						curRecv.clear();
-						mOther->mWorkQueue.emplace(Op::sendComplete);
-					};
 
-					while (true)
-					{
-						auto op = mWorkQueue.pop();
 
-						if (op.mType == Op::send)
-						{
-							assert(!curSend.mCont);
+			void enqueue(Op op)
+			{
+				if (mWorker->mHasThread == false)
+					mWorker->process(std::move(op));
+				else
+					mWorker->mWorkQueue.emplace(std::move(op));
 
-							curSend = std::move(op);
-
-							mOther->mWorkQueue.emplace(Op::sendBegin, curSend.mData);
-						}
-						else if (op.mType == Op::recv)
-						{
-							assert(!curRecv.mCont);
-
-							
-							if (curRecv.mType == Op::sendBegin)
-							{
-								// there is an active send op.
-								complete(curRecv.mData, op.mData, op.mCont);
-							}
-							else
-							{
-								curRecv = std::move(op);
-							}
-						}
-						else if (op.mType == Op::sendBegin)
-						{
-
-							if (curRecv.mType == Op::recv)
-							{
-								// there is an active recv op
-								complete(op.mData, curRecv.mData, curRecv.mCont);
-							}
-							else
-								curRecv = std::move(op);
-						}
-						else if (op.mType == Op::sendComplete)
-						{
-							assert(curSend.mCont);
-							curSend.mCont({}, curSend.mData.size());
-							curSend.clear();
-						}
-						else
-						{
-							assert(op.mType == Op::stop);
-							std::cout << hexPtr(this) << "exit " << std::endl;
-
-							if (curSend.mCont)
-								curSend.mCont(code::ioError, 0);
-
-							if (curRecv.mCont)
-								curRecv.mCont(code::ioError, 0);
-
-							curSend.clear();
-							curRecv.clear();
-							return;
-						}
-					}
-				});
 			}
 		};
 
