@@ -258,7 +258,7 @@ namespace coproto
 		}
 
 		bool done() override {
-			return mEc != code::suspend;
+			return mStatus == Status::Done;
 		}
 
 	};

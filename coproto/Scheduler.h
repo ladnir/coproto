@@ -54,6 +54,7 @@ namespace coproto
 	{
 		virtual error_code recv(span<u8> data) = 0;
 		virtual error_code send(span<u8> data) = 0;
+		virtual void cancel() = 0;
 	};
 
 	class Executor
@@ -119,18 +120,19 @@ namespace coproto
 
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
-		bool mRunning = false;
+		bool mRunning = false, mSentHeader = false;
 		bool mSuspend;
 
 
 		void run();
 		bool done();
 
-
-		inline void dispatch(std::function<void()>&& fn)
+		template<typename Fn>
+			requires std::is_constructible_v<std::function<void()>, Fn>
+		inline void dispatch(Fn&& fn)
 		{
 			if (mExecutor)
-				mExecutor->dispatch(std::move(fn));
+				mExecutor->dispatch(std::forward<Fn>(fn));
 			else
 				fn();
 		}
@@ -141,11 +143,14 @@ namespace coproto
 		bool mHaveHeader = false, mActiveRecv = false, mActiveSend = false;
 
 		void initAsyncRecv();
+		void initRecv();
+
 		void asyncRecvHeader();
 		void asyncRecvBody();
 
 
 		void initAsyncSend();
+		void initSend();
 
 		u32& getSendHeaderSlot()
 		{

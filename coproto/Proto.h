@@ -329,6 +329,9 @@ namespace coproto
 		void asyncThrowProtocolTest();
 
 		void endOfRoundTest();
+		
+		void errorSocketTest();
+
 	}
 
 }

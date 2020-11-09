@@ -25,19 +25,38 @@ namespace coproto
 		struct InterlaceSock : public Socket
 		{
 			std::list<std::vector<u8>> mInbound, mOutbound;
+			bool mCanceled = false;
+
+			LocalExecutor* mEval = nullptr;
 
 			error_code recv(span<u8> data) override;
 			error_code send(span<u8> data) override;
+
+
+			void cancel() override
+			{
+				mInbound.clear();
+				mOutbound.clear();
+				mCanceled = true;
+			}
 		};
 
 
 		struct BlockingSock : public Socket
 		{
 			BlockingSock* mOther;
+			LocalExecutor* mEval = nullptr;
+			bool mCanceled = false;
 			BlockingQueue<std::vector<u8>> mInbound;
 
 			error_code recv(span<u8> data) override;
 			error_code send(span<u8> data) override;
+
+			void cancel() override
+			{
+				mCanceled = true;
+				mOther->mInbound.emplace();
+			}
 		};
 
 
@@ -85,6 +104,7 @@ namespace coproto
 			{
 				BlockingQueue<Op> mWorkQueue;
 
+				LocalExecutor* mEval = nullptr;
 				bool mHasThread=false;
 				std::thread mThread;
 
@@ -148,11 +168,23 @@ namespace coproto
 		std::array<BlockingSock, 2> mBlkSocks;
 		std::array<AsyncSock, 2> mAsyncSock;
 		std::array<Scheduler, 2> mScheds;
+		u64 mOpIdx = 0;
+		u64 mErrorIdx = ~0ull;
+
+		error_code getError()
+		{
+			if (mOpIdx++ == mErrorIdx)
+				return code::ioError;
+			return {};
+		}
 
 		void sendMsgs(u64 sender)
 		{
 			assert(mSocks[sender ^ 1].mInbound.size() == 0);
-			mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
+			if (mSocks[sender].mCanceled)
+				mSocks[sender ^ 1].cancel();
+			else
+				mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
 		}
 
 		error_code execute(Resumable& p0, Resumable& p1, Type type = Type::interlace);

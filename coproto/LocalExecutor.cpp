@@ -8,7 +8,14 @@ namespace coproto
 
 	error_code LocalExecutor::InterlaceSock::recv(span<u8> data)
 	{
-		error_code ec;
+		if (mCanceled)
+			return code::ioError;
+
+		assert(mEval);
+		error_code ec = mEval->getError();
+		if (ec)
+			return ec;
+
 		if (mInbound.size())
 		{
 			auto& front = mInbound.front();
@@ -34,9 +41,13 @@ namespace coproto
 	error_code LocalExecutor::InterlaceSock::send(span<u8> data)
 	{
 
-		//auto data = buff.asSpan();
-		//if (data.size() == 0)
-		//	return code::sendLengthZeroMsg;
+		if (mCanceled)
+			return code::ioError;
+
+		assert(mEval);
+		error_code ec = mEval->getError();
+		if (ec)
+			return ec;
 
 		mOutbound.emplace_back(data.begin(), data.end());
 		return {};
@@ -49,10 +60,20 @@ namespace coproto
 
 	error_code LocalExecutor::BlockingSock::recv(span<u8> data)
 	{
+
+		if (mCanceled)
+			return code::ioError;
+
+		assert(mEval);
+		error_code ec = mEval->getError();
+		if (ec)
+			return ec;
+
 		const auto vec = mInbound.pop();
 
 		if (vec.size() == 0)
 		{
+			cancel();
 			return code::ioError;
 		}
 
@@ -65,6 +86,15 @@ namespace coproto
 
 	error_code LocalExecutor::BlockingSock::send(span<u8> data)
 	{
+
+		if (mCanceled)
+			return code::ioError;
+
+		assert(mEval);
+		error_code ec = mEval->getError();
+		if (ec)
+			return ec;
+
 		mOther->mInbound.emplace(data.begin(), data.end());
 		return {};
 	}
@@ -78,22 +108,23 @@ namespace coproto
 			p1.setName("main");
 #endif
 
+		mOpIdx = 0;
 		p0.mSlotIdx = 0;
 		p1.mSlotIdx = 0;
 		mScheds[0].scheduleReady(p0);
 		mScheds[1].scheduleReady(p1);
 		mScheds[0].mRoundIdx = 0;
 		mScheds[1].mRoundIdx = 0;
-		//mScheds[0].mPrint = true;
-		//mScheds[1].mPrint = true;
+
+		
 
 		if (type == Type::interlace)
 		{
 
 			mScheds[0].mSock = &mSocks[0];
 			mScheds[1].mSock = &mSocks[1];
-
-
+			mSocks[0].mEval = this;
+			mSocks[1].mEval = this;
 
 			while (
 				mScheds[0].done() == false ||
@@ -141,6 +172,8 @@ namespace coproto
 			mScheds[0].mSock = &mBlkSocks[0];
 			mScheds[1].mSock = &mBlkSocks[1];
 
+			mBlkSocks[0].mEval = this;
+			mBlkSocks[1].mEval = this;
 
 			mBlkSocks[0].mOther = &mBlkSocks[1];
 			mBlkSocks[1].mOther = &mBlkSocks[0];
@@ -148,16 +181,16 @@ namespace coproto
 			auto thrd = std::thread([&]() {
 				mScheds[0].run();
 
-				if (p0.getErrorCode())
-					mBlkSocks[1].mInbound.emplace();
+				//if (p0.getErrorCode())
+				//	mBlkSocks[1].mInbound.emplace();
 
 				});
 
 
 			mScheds[1].run();
 
-			if (p1.getErrorCode())
-				mBlkSocks[0].mInbound.emplace();
+			//if (p1.getErrorCode())
+			//	mBlkSocks[0].mInbound.emplace();
 
 			thrd.join();
 
@@ -185,6 +218,9 @@ namespace coproto
 			mAsyncSock[1].mIdx = 1;
 			mAsyncSock[0].mWorker = &socketWorker;
 			mAsyncSock[1].mWorker = &socketWorker;
+			socketWorker.mEval = this;
+			socketWorker.mEval = this;
+
 
 			//mScheds[0].mPrint = true;
 			//mScheds[1].mPrint = true;
@@ -276,6 +312,8 @@ namespace coproto
 			mAsyncSock[1].mIdx = 1;
 			mAsyncSock[0].mWorker = &socketWorker;
 			mAsyncSock[1].mWorker = &socketWorker;
+			socketWorker.mEval = this;
+			socketWorker.mEval = this;
 
 			socketWorker.startThread();
 			ThreadExecutor ex;
@@ -400,7 +438,13 @@ namespace coproto
 
 	void LocalExecutor::AsyncSock::Worker::process(Op op)
 	{
-		if (mCanceled)
+		assert(mEval);
+		if (mEval->mOpIdx == mEval->mErrorIdx)
+		{
+			if (op.mCont)
+				op.mCont(code::ioError, 0);
+		}
+		else if (mCanceled)
 		{
 			if (op.mCont)
 				op.mCont(code::ioError, 0);
