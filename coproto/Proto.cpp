@@ -7,7 +7,7 @@
 #include <string>
 
 #include "Buffers.h"
-#include "LocalExecutor.h"
+#include "LocalEvaluator.h"
 
 namespace coproto
 {
@@ -26,7 +26,7 @@ namespace coproto
 	namespace tests
 	{
 
-		auto types = { LocalExecutor::interlace, LocalExecutor::blocking, LocalExecutor::async, LocalExecutor::asyncThread };
+		auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
 
 
 		Proto<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
@@ -201,7 +201,7 @@ namespace coproto
 
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				//std::cout << sched.mScheds[0].getDot() << std::endl;
 				//std::cout << sched.mScheds[1].getDot() << std::endl;
@@ -209,7 +209,7 @@ namespace coproto
 				if (ec)
 					throw std::runtime_error(ec.message());
 
-				if (LocalExecutor::interlace)
+				if (LocalEvaluator::interlace)
 				{
 					if (sched.mScheds[0].numRounds() != 6)
 						throw std::runtime_error("num round");
@@ -271,7 +271,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 
 				if (ec)
@@ -293,7 +293,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 
 				if (ec)
@@ -349,7 +349,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 
 				if (ec)
@@ -372,7 +372,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (!ec)
 					throw std::runtime_error("");
@@ -400,7 +400,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec != code::badBufferSize)
 					throw std::runtime_error(ec.message());
@@ -422,7 +422,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error("");
@@ -477,7 +477,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error(ec.message());
@@ -502,7 +502,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (!ec)
 					throw std::runtime_error("");
@@ -541,7 +541,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error(ec.message());
@@ -596,7 +596,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (!ec)
 					throw std::runtime_error("");
@@ -637,7 +637,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec || !hasEc)
 					throw std::runtime_error("");
@@ -719,7 +719,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				//sched.mScheds[0].mPrint = true;
 				//sched.mScheds[1].mPrint = true;
 
@@ -773,7 +773,7 @@ namespace coproto
 			{
 				auto p0 = proto(0);
 				auto p1 = proto(1);
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec != code::uncaughtException)
 					throw std::runtime_error("");
@@ -813,11 +813,11 @@ namespace coproto
 			{
 				auto p0 = sendProto2();
 				auto p1 = recvProto2();
-				LocalExecutor sched;
+				LocalEvaluator sched;
 				auto ec = sched.execute(p0, p1, t);
 
 
-				if (t == LocalExecutor::interlace)
+				if (t == LocalEvaluator::interlace)
 				{
 					if (sched.mScheds[0].numRounds() != 2)
 						throw std::runtime_error("num round");
@@ -898,10 +898,10 @@ namespace coproto
 #undef MULTI
 #endif
 
-			for (auto type : { LocalExecutor::interlace, LocalExecutor::async })
+			for (auto type : { LocalEvaluator::interlace, LocalEvaluator::async })
 			{
 
-				LocalExecutor eval;
+				LocalEvaluator eval;
 				auto p0 = proto(0);
 				auto p1 = proto(1);
 				auto ec = eval.execute(p0, p1, type);
@@ -915,7 +915,7 @@ namespace coproto
 					auto p0 = proto(0);
 					auto p1 = proto(1);
 
-					LocalExecutor eval;
+					LocalEvaluator eval;
 					eval.mErrorIdx = i;
 					auto ec = eval.execute(p0, p1, type);
 

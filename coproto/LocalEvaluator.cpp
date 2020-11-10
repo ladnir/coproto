@@ -1,4 +1,4 @@
-#include "LocalExecutor.h"
+#include "LocalEvaluator.h"
 
 
 namespace coproto
@@ -6,7 +6,7 @@ namespace coproto
 
 
 
-	error_code LocalExecutor::InterlaceSock::recv(span<u8> data)
+	error_code LocalEvaluator::InterlaceSock::recv(span<u8> data)
 	{
 		if (mCanceled)
 			return code::ioError;
@@ -38,7 +38,7 @@ namespace coproto
 		return ec;
 	}
 
-	error_code LocalExecutor::InterlaceSock::send(span<u8> data)
+	error_code LocalEvaluator::InterlaceSock::send(span<u8> data)
 	{
 
 		if (mCanceled)
@@ -58,7 +58,7 @@ namespace coproto
 
 
 
-	error_code LocalExecutor::BlockingSock::recv(span<u8> data)
+	error_code LocalEvaluator::BlockingSock::recv(span<u8> data)
 	{
 
 		if (mCanceled)
@@ -84,7 +84,7 @@ namespace coproto
 		return {};
 	}
 
-	error_code LocalExecutor::BlockingSock::send(span<u8> data)
+	error_code LocalEvaluator::BlockingSock::send(span<u8> data)
 	{
 
 		if (mCanceled)
@@ -99,7 +99,7 @@ namespace coproto
 		return {};
 	}
 
-	error_code LocalExecutor::execute(Resumable& p0, Resumable& p1, Type type)
+	error_code LocalEvaluator::execute(Resumable& p0, Resumable& p1, Type type)
 	{
 #ifdef COPROTO_LOGGING
 		if (p0.mName.size() == 0)
@@ -301,7 +301,7 @@ namespace coproto
 		return {};
 	}
 
-	void LocalExecutor::AsyncSock::Worker::startThread()
+	void LocalEvaluator::AsyncSock::Worker::startThread()
 	{
 		mHasThread = true;
 
@@ -323,7 +323,7 @@ namespace coproto
 			});
 	}
 
-	void LocalExecutor::AsyncSock::Worker::completeOp(u64 i)
+	void LocalEvaluator::AsyncSock::Worker::completeOp(u64 i)
 	{
 		assert(mRecv[i]);
 		assert(mSend[i ^ 1]);
@@ -349,7 +349,7 @@ namespace coproto
 
 	}
 
-	void LocalExecutor::AsyncSock::Worker::cancel()
+	void LocalEvaluator::AsyncSock::Worker::cancel()
 	{
 		for (u64 i : {0, 1})
 		{
@@ -374,7 +374,7 @@ namespace coproto
 		mStopped[1] = true;
 	}
 
-	void LocalExecutor::AsyncSock::Worker::process(Op op)
+	void LocalEvaluator::AsyncSock::Worker::process(Op op)
 	{
 		assert(mEval);
 		if (mEval->mOpIdx == mEval->mErrorIdx)

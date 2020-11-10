@@ -31,13 +31,9 @@ namespace coproto
 			struct ModelController : Controller
 			{
 				// construct the
-				template<typename... Args,
-					typename Enabled =
-					typename std::enable_if<
-					std::is_constructible<U, Args...>::value
-					>::type
-				>
-					ModelController(Args&& ... args)
+				template<typename... Args>
+				requires std::is_constructible_v<U, Args...>
+				ModelController(Args&& ... args)
 					:mU(std::forward<Args>(args)...)
 				{}
 
@@ -101,12 +97,10 @@ namespace coproto
 			}
 
 			template<typename U, typename... Args >
-			typename std::enable_if<
-				(sizeof(ModelController<U>) <= sizeof(Storage)) &&
+			requires (sizeof(ModelController<U>) <= sizeof(Storage)) &&
 				std::is_base_of<Interface, U>::value&&
 				std::is_constructible<U, Args...>::value
-			>::type
-				emplace(Args&& ... args)
+			void emplace(Args&& ... args)
 			{
 				destruct();
 
@@ -118,12 +112,11 @@ namespace coproto
 			}
 
 			template<typename U, typename... Args >
-			typename std::enable_if<
+			requires
 				(sizeof(ModelController<U>) > sizeof(Storage)) &&
 				std::is_base_of<Interface, U>::value&&
 				std::is_constructible<U, Args...>::value
-					>::type
-				emplace(Args&& ... args)
+			void emplace(Args&& ... args)
 			{
 				destruct();
 

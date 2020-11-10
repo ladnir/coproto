@@ -10,7 +10,7 @@ namespace coproto
 {
 
 
-	class LocalExecutor
+	class LocalEvaluator
 	{
 	public:
 
@@ -27,7 +27,7 @@ namespace coproto
 			std::list<std::vector<u8>> mInbound, mOutbound;
 			bool mCanceled = false;
 
-			LocalExecutor* mEval = nullptr;
+			LocalEvaluator* mEval = nullptr;
 
 			error_code recv(span<u8> data) override;
 			error_code send(span<u8> data) override;
@@ -45,7 +45,7 @@ namespace coproto
 		struct BlockingSock : public Socket
 		{
 			BlockingSock* mOther;
-			LocalExecutor* mEval = nullptr;
+			LocalEvaluator* mEval = nullptr;
 			bool mCanceled = false;
 			BlockingQueue<std::vector<u8>> mInbound;
 
@@ -105,7 +105,7 @@ namespace coproto
 			{
 				BlockingQueue<Op> mWorkQueue;
 
-				LocalExecutor* mEval = nullptr;
+				LocalEvaluator* mEval = nullptr;
 				bool mHasThread=false;
 				std::thread mThread;
 

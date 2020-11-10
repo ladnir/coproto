@@ -15,8 +15,8 @@ namespace coproto
 	{
 
 		template<typename Container>
-		typename std::enable_if<is_resizable_trivial_container_v<Container>, error_code>::type
-			tryResize(u64 size, Container& container)
+		requires is_resizable_trivial_container_v<Container>
+			error_code tryResize(u64 size, Container& container)
 		{
 			if (size % sizeof(typename Container::value_type))
 				return code::badBufferSize;
@@ -31,22 +31,22 @@ namespace coproto
 		}
 
 		template<typename Container>
-		typename std::enable_if<!is_resizable_trivial_container_v<Container>, error_code>::type
-			tryResize(u64 size, Container& container)
+		requires (!is_resizable_trivial_container_v<Container>)
+			error_code tryResize(u64 size, Container& container)
 		{
 			return code::noResizeSupport;
 		}
 
 		template<typename Container>
-		typename std::enable_if<is_trivial_container_v<Container>, span<u8>>::type
-			asSpan(Container& container)
+		requires is_trivial_container_v<Container>
+			span<u8> asSpan(Container& container)
 		{
 			return span<u8>((u8*)container.data(), container.size() * sizeof(typename Container::value_type));
 		}
 
 		template<typename ValueType>
-		typename std::enable_if<std::is_trivial_v<ValueType>, span<u8>>::type
-			asSpan(ValueType& container)
+		requires std::is_trivial_v<ValueType>
+			span<u8> asSpan(ValueType& container)
 		{
 			return span<u8>((u8*)&container, sizeof(ValueType));
 		}
@@ -76,7 +76,7 @@ namespace coproto
 			return internal::asSpan(mCont);
 		}
 
-	}; 
+	};
 
 
 	template<typename Container>
@@ -106,7 +106,7 @@ namespace coproto
 	};
 
 
-	struct RecvBuffer 
+	struct RecvBuffer
 	{
 		virtual span<u8> asSpan(u64 resize) = 0;
 	};
@@ -286,14 +286,14 @@ namespace coproto
 #endif
 		}
 
-		SendBuffer getBuffer() 
+		SendBuffer getBuffer()
 		{
 			SendBuffer ret;
 			ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
 			return ret;
 		}
 
-		error_code resume_(Scheduler& sched) override 
+		error_code resume_(Scheduler& sched) override
 		{
 			if (mStatus == Status::Uninit)
 			{
@@ -309,7 +309,7 @@ namespace coproto
 					sched.send_(getBuffer(), getSlot(), this);
 				}
 			}
-			else if(mStatus == Status::Inprogress)
+			else if (mStatus == Status::Inprogress)
 			{
 				mStatus = Status::Done;
 				if (mEc == code::suspend)
@@ -361,7 +361,7 @@ namespace coproto
 		}
 
 
-		SendBuffer getBuffer() 
+		SendBuffer getBuffer()
 		{
 			SendBuffer ret;
 			ret.mStorage.emplace<MvSendBuffer<Container>>(std::move(mContainer));

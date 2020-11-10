@@ -157,7 +157,7 @@
     <ClInclude Include="EndOfRound.h" />
     <ClInclude Include="error_code.h" />
     <ClInclude Include="InlinePoly.h" />
-    <ClInclude Include="LocalExecutor.h" />
+    <ClInclude Include="LocalEvaluator.h" />
     <ClInclude Include="Name.h" />
     <ClInclude Include="Queue.h" />
     <ClInclude Include="Result.h" />
@@ -172,7 +172,7 @@
     <ClCompile Include="Async.cpp" />
     <ClCompile Include="InlinePoly.cpp" />
     <ClCompile Include="error_code.cpp" />
-    <ClCompile Include="LocalExecutor.cpp" />
+    <ClCompile Include="LocalEvaluator.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Scheduler.cpp" />

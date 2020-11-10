@@ -159,9 +159,9 @@ namespace coproto
 			}
 
 			template<typename... Args>
-			typename std::enable_if<
+			requires
 				std::is_constructible<T, Args...>::value
-			>::type emplace_back(Args&&... args)
+			void emplace_back(Args&&... args)
 			{
 				grow(size() + 1);
 				mSpan = span<T>(data(), size() + 1);
