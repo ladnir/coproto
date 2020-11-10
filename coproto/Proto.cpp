@@ -439,6 +439,14 @@ namespace coproto
 				if (party)
 				{
 					co_await send(buff).wrap();
+
+
+					auto ec = co_await recv(buff).wrap();
+					if (ec != code::ioError)
+					{
+						std::cout << ec.message() << std::endl;
+						throw std::runtime_error(ec.message());
+					}
 				}
 				else
 				{
@@ -447,6 +455,21 @@ namespace coproto
 
 					if (ec != code::badBufferSize)
 						throw std::runtime_error("");
+
+					ec = co_await recvFixedSize(buff).wrap();
+					if (ec != code::ioError)
+					{
+						std::cout << ec.message() << std::endl;
+						throw std::runtime_error(ec.message());
+					}
+
+
+					ec = co_await send(buff).wrap();
+					if (ec != code::ioError)
+					{
+						std::cout << ec.message() << std::endl;
+						throw std::runtime_error(ec.message());
+					}
 				}
 			};
 
@@ -595,6 +618,11 @@ namespace coproto
 
 					if (ec == code::uncaughtException)
 						hasEc = true;
+
+					//ec = co_await send(buff).wrap();
+
+					//if(ec != code::ioError)
+
 				}
 				else
 				{
@@ -619,9 +647,6 @@ namespace coproto
 
 		void asyncProtocolTest()
 		{
-
-			int i = 0;
-
 
 #define MULTI
 			bool print = false;
@@ -749,8 +774,6 @@ namespace coproto
 				auto p0 = proto(0);
 				auto p1 = proto(1);
 				LocalExecutor sched;
-				//sched.mScheds[0].mPrint = true;
-				//sched.mScheds[1].mPrint = true;
 				auto ec = sched.execute(p0, p1, t);
 				if (ec != code::uncaughtException)
 					throw std::runtime_error("");
@@ -805,162 +828,6 @@ namespace coproto
 					throw std::runtime_error(ec.message());
 			}
 		}
-
-
-//		struct ErrorSocketEvaluator
-//		{
-//
-//
-//			struct Sock : public Socket
-//			{
-//				bool mCanceled = false;
-//				std::list<std::vector<u8>> mInbound, mOutbound;
-//				ErrorSocketEvaluator* mEval = nullptr;
-//				error_code recv(span<u8> data)
-//				{
-//					assert(mEval);
-//
-//					if (mCanceled)
-//						return code::ioError;
-//
-//					auto ec = mEval->getError();
-//					if (ec)
-//						return ec;
-//
-//
-//					if (mInbound.size())
-//					{
-//						auto& front = mInbound.front();
-//						assert(data.size() == front.size());
-//
-//						std::memcpy(data.data(), front.data(), data.size());
-//						mInbound.pop_front();
-//					}
-//					else
-//					{
-//						ec = code::suspend;
-//					}
-//
-//					return ec;
-//				}
-//				error_code send(span<u8> data)
-//				{
-//					assert(mEval);
-//
-//					if (mCanceled)
-//						return code::ioError;
-//
-//					auto ec = mEval->getError();
-//					if (ec)
-//						return ec;
-//
-//					mOutbound.emplace_back(data.begin(), data.end());
-//					return {};
-//				}
-//
-//
-//				void cancel() override
-//				{
-//					mCanceled = true;
-//					mInbound.clear();
-//					mOutbound.clear();
-//				}
-//			};
-//
-//			void sendMsgs(u64 sender)
-//			{
-//
-//				if (mSocks[sender].mCanceled)
-//					mSocks[sender ^ 1].cancel();
-//				else
-//				{
-//					assert(mSocks[sender ^ 1].mInbound.size() == 0);
-//					mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
-//				}
-//			}
-//
-//
-//			u64 mCurIdx = 0, mErrorIdx = ~0ull;
-//			error_code getError()
-//			{
-//				if (mCurIdx++ == mErrorIdx)
-//					return code::ioError;
-//				else
-//					return {};
-//			}
-//
-//			std::array<Sock, 2> mSocks;
-//			std::array<Scheduler, 2> mScheds;
-//			error_code execute(Resumable& p0, Resumable& p1, u64 i)
-//			{
-//#ifdef COPROTO_LOGGING
-//				if (p0.mName.size() == 0)
-//					p0.setName("main");
-//				if (p1.mName.size() == 0)
-//					p1.setName("main");
-//#endif
-//
-//				mCurIdx = 0;
-//				mErrorIdx = i;
-//
-//				p0.mSlotIdx = 0;
-//				p1.mSlotIdx = 0;
-//				mScheds[0].scheduleReady(p0);
-//				mScheds[1].scheduleReady(p1);
-//				mScheds[0].mRoundIdx = 0;
-//				mScheds[1].mRoundIdx = 0;
-//
-//				mSocks[0].cancel();
-//				mSocks[1].cancel();
-//				mSocks[0].mCanceled = false;
-//				mSocks[1].mCanceled = false;
-//
-//				mScheds[0].mSock = &mSocks[0];
-//				mScheds[1].mSock = &mSocks[1];
-//				mSocks[0].mEval = this;
-//				mSocks[1].mEval = this;
-//
-//				while (
-//					mScheds[0].done() == false ||
-//					mScheds[1].done() == false)
-//				{
-//
-//					if (mScheds[0].done() == false)
-//					{
-//						mScheds[0].run();
-//						if (mScheds[0].done())
-//						{
-//							auto e0 = p0.getErrorCode();
-//							if (e0)
-//								return e0;
-//						}
-//
-//						sendMsgs(0);
-//					}
-//
-//					if (mScheds[1].done() == false)
-//					{
-//						mScheds[1].run();
-//						if (mScheds[1].done())
-//						{
-//							auto e1 = p1.getErrorCode();
-//							if (e1)
-//								return e1;
-//						}
-//
-//						sendMsgs(1);
-//					}
-//				}
-//
-//				if (p0.getErrorCode())
-//					return p0.getErrorCode();
-//				if (p1.getErrorCode())
-//					return p1.getErrorCode();
-//				return {};
-//			}
-//
-//		};
-
 
 		void errorSocketTest()
 		{

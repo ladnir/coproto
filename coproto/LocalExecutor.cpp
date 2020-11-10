@@ -221,73 +221,9 @@ namespace coproto
 			socketWorker.mEval = this;
 			socketWorker.mEval = this;
 
-
-			//mScheds[0].mPrint = true;
-			//mScheds[1].mPrint = true;
-
-			bool useThread = false;
-			if (useThread)
-			{
-
-				socketWorker.startThread();
-				ThreadExecutor ex;
-				mScheds[0].mExecutor = &ex;
-				mScheds[1].mExecutor = &ex;
-
-				ex.dispatch([&]() {
-					mScheds[0].run();
-					});
-				ex.dispatch([&]() {
-					mScheds[1].run();
-					});
-
-
-				bool done0 = false;
-				bool done1 = false;
-				bool done = false;
-
-				mScheds[0].mCont = [&](error_code ec) {
-
-					if (ec)
-						mAsyncSock[0].cancel();
-					else
-						mAsyncSock[0].stop();
-					if (done)
-						ex.dispatch({});
-					else
-						done = true;
-
-					done0 = true;
-				};
-				mScheds[1].mCont = [&](error_code ec) {
-
-					if (ec)
-						mAsyncSock[1].cancel();
-					else
-						mAsyncSock[1].stop();
-
-					if (done)
-						ex.dispatch({});
-					else
-						done = true;
-
-					done1 = true;
-
-				};
-
-
-				std::cout << "executor " << std::this_thread::get_id() << std::endl;
-				ex.run();
-				socketWorker.join();
-
-			}
-			else
-			{
-
-				mScheds[0].run();
-				mScheds[1].run();
-
-			}
+			mScheds[0].run();
+			mScheds[1].run();
+			//mScheds[0].run();
 
 			if (p0.done() == false)
 				throw std::runtime_error(COPROTO_LOCATION);
@@ -377,10 +313,12 @@ namespace coproto
 
 			while (true)
 			{
-				process(mWorkQueue.pop());
+				auto op = mWorkQueue.pop();
 
-				if (mStopped[0] && mStopped[1])
+				if (op.mType == Op::join)
 					return;
+				else
+					process(std::move(op));
 			}
 			});
 	}

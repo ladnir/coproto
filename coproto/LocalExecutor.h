@@ -69,7 +69,8 @@ namespace coproto
 					send,
 					recv,
 					stop,
-					cancel
+					cancel,
+					join
 				};
 				u64 mIdx = ~0ull;
 				Type mType;
@@ -121,8 +122,11 @@ namespace coproto
 
 				void join()
 				{
-					if(mHasThread)
+					if (mHasThread)
+					{
+						mWorkQueue.emplace(0, Op::join);
 						mThread.join();
+					}
 				}
 			};
 

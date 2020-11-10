@@ -40,10 +40,10 @@ namespace coproto
 			return;
 
 		mRunning = true;
-		mSuspend = false;
+		//mSuspend = false;
 
 
-		while (!done() && mSuspend == false)
+		while (!done())
 		{
 			if (mReady.size() == 0)
 			{
@@ -272,7 +272,7 @@ namespace coproto
 		auto ec = mSock->recv(mRecvHeader);
 		if (ec)
 		{
-			mSuspend = true;
+			//mSuspend = true;
 			return ec;
 		}
 
@@ -474,6 +474,9 @@ namespace coproto
 			mRecvBuffers.erase(iter);
 		}
 
+		mActiveRecv = false;
+		mHaveHeader = false;
+
 		if (mASock)
 			mASock->cancel();
 		else
@@ -499,6 +502,8 @@ namespace coproto
 
 			mSendBuffers.pop_front();
 		}
+
+		mActiveSend = false;
 
 		if (mASock)
 			mASock->cancel();

@@ -121,7 +121,7 @@ namespace coproto
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
 		bool mRunning = false, mSentHeader = false;
-		bool mSuspend;
+		//bool mSuspend;
 
 
 		void run();
