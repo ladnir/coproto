@@ -19,8 +19,8 @@ namespace coproto
 		Continutation(Continutation&&) = default;
 
 		template<typename Fn>
-			requires std::is_constructible_v<Func, Fn&&>
-		Continutation(Fn&& fn)
+		requires std::is_constructible_v<Func, Fn&&>
+			Continutation(Fn&& fn)
 			: mFn(std::forward<Fn>(fn))
 		{}
 
@@ -109,18 +109,19 @@ namespace coproto
 		std::list<std::tuple<SendBuffer, u32, Resumable*>> mSendBuffers;
 
 		std::vector<Resumable*> mStack;
-		
+
 		Socket* mSock = nullptr;
 		AsyncSocket* mASock = nullptr;
 		Executor* mExecutor = nullptr;
 
 		std::function<void(error_code)> mCont;
 
-		error_code resume(Resumable* proto);
 
 		u64 mRoundIdx = 0;
 		bool mPrint = false, mLogging = false;
 		bool mRunning = false, mSentHeader = false;
+		u32 mNextSlot = 1;
+		bool mHaveHeader = false, mActiveRecv = false, mActiveSend = false;
 		//bool mSuspend;
 
 
@@ -128,20 +129,19 @@ namespace coproto
 		bool done();
 
 		template<typename Fn>
-			requires std::is_constructible_v<std::function<void()>, Fn>
-		inline void dispatch(Fn&& fn)
+		requires std::is_constructible_v<std::function<void()>, Fn>
+			inline void dispatch(Fn&& fn)
 		{
 			if (mExecutor)
 				mExecutor->dispatch(std::forward<Fn>(fn));
 			else
 				fn();
 		}
-		
 
 
-		u32 mNextSlot = 1;
-		bool mHaveHeader = false, mActiveRecv = false, mActiveSend = false;
 
+
+		error_code resume(Resumable* proto);
 		void initAsyncRecv();
 		void initRecv();
 
@@ -159,8 +159,8 @@ namespace coproto
 		u32& getSendHeaderSize()
 		{
 			return ((u32*)mSendHeader.data())[0];
-		}		
-		
+		}
+
 		u32& getRecvHeaderSlot()
 		{
 			return ((u32*)mRecvHeader.data())[1];
@@ -186,7 +186,7 @@ namespace coproto
 
 		void fulfillDep(Resumable& upstream, error_code ec, std::exception_ptr ptr);
 
-		//void setEndOfRound();
+		void clear();
 
 
 		u64 numRounds()

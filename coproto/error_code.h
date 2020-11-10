@@ -13,33 +13,17 @@ namespace coproto
 		success = 0,
 		//The io operation failed and the caller should abort;
 		ioError,
-		// message has yet to arrive
-		//noMessageAvailable,
 		// bad buffer size. The reciever's buffer size does not match the number of bytes sent.
 		badBufferSize,
-		//// data was received over the connection and the receiver buffer was resized. However, the receive buffer
-		//// value_type is not a multiple of the number of bytes received. The receive buffer is incorrect.
-		//bufferResizeNotMultipleOfValueType,
-		//// resizing the buffer failed for an unkown reason.
-		//bufferResizedFailed,
-		// the numberleying buffer does not support resizing
-		//noResizeSupport,
-		// The protocol has been suspended for some reason.
-
-		//endOfRound,
-
+		// The operation has been suspended.
 		suspend,
-		//endOfRoundFlag,
 		// sending a zero length message is not allowed.
 		sendLengthZeroMsg,
-		// One of the other parties was caught cheating
-		secuirtyViolation,
-		//An error occured while paring one of the protocol messages.
-		parsingError,
-		//An error occured durring the protocol such as a messages being of the wrong size.";
-		protocolError,
+		// The requested operation for not support async sockets.
+		noAsyncSupport,
 		//An uncaught exception was thrown during the protocol. ";
-		uncaughtException
+		uncaughtException,
+		invalidArguments
 	};
 }
 namespace std {

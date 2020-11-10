@@ -16,7 +16,7 @@
 #include "EndOfRound.h"
 #include "Name.h"
 #include "Resumable.h"
-
+//#include ""
 #include <cassert>
 
 
@@ -24,6 +24,50 @@ namespace coproto
 {
 	std::string hexPtr(void* p);
 
+	namespace internal
+	{
+		struct ProtoImpl : public InlinePoly<Resumable, inlineSize>
+		{
+			
+			std::unique_ptr<Scheduler> mSched;
+
+
+			error_code evaluate(Socket& sock)
+			{
+				if (mSched == nullptr)
+				{
+					mSched.reset(new Scheduler);
+					mSched->scheduleReady(*get());
+					get()->mSlotIdx = 0;
+				}
+
+				mSched->mSock = &sock;
+				mSched->run();
+
+				if (get()->done())
+					return get()->getErrorCode();
+				else
+					return code::suspend;
+			}
+
+			void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex)
+			{
+				assert(mSched == nullptr);
+				mSched.reset(new Scheduler);
+				mSched->scheduleReady(*get());
+				get()->mSlotIdx = 0;
+
+				mSched->mASock = &sock;
+				mSched->mExecutor = &ex;
+				mSched->mCont = std::move(cont);
+
+				mSched->dispatch([this]() {
+					mSched->run();
+					});
+
+			}
+		};
+	}
 
 	template<typename T = void>
 	class Proto
@@ -31,7 +75,8 @@ namespace coproto
 	public:
 		using promise_type = internal::ProtoPromise<T>;
 		using coro_handle = std::coroutine_handle<promise_type>;
-		internal::InlinePoly<Resumable, internal::inlineSize> mBase;
+
+		internal::ProtoImpl mBase;
 
 		using value_type = T;
 
@@ -56,11 +101,20 @@ namespace coproto
 #endif
 		}
 
-
-		operator Resumable& ()
+		error_code evaluate(Socket& sock)
 		{
-			assert(mBase.get());
-			return *mBase.get();
+			return mBase.evaluate(sock);
+		}
+
+		void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex)
+		{
+			mBase.evaluate(sock, std::move(cont), ex);
+
+		}
+
+		operator internal::ProtoImpl& ()
+		{
+			return mBase;
 		}
 	};
 

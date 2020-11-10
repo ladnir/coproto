@@ -171,7 +171,7 @@ namespace coproto
 		std::array<InterlaceSock, 2> mSocks;
 		std::array<BlockingSock, 2> mBlkSocks;
 		std::array<AsyncSock, 2> mAsyncSock;
-		std::array<Scheduler, 2> mScheds;
+		//std::array<Scheduler, 2> mScheds;
 		u64 mOpIdx = 0;
 		u64 mErrorIdx = ~0ull;
 
@@ -191,7 +191,7 @@ namespace coproto
 				mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
 		}
 
-		error_code execute(Resumable& p0, Resumable& p1, Type type = Type::interlace);
+		error_code execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type = Type::interlace);
 	};
 
 }

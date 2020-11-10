@@ -561,6 +561,29 @@ namespace coproto
 	}
 	}
 
+	void Scheduler::clear()
+	{
+		assert(done());
+
+		mReady.clear();
+		mRecvBuffers.clear();
+		mSendBuffers.clear();
+		mStack.clear();
+		mSock = nullptr;
+		mASock = nullptr;
+		mExecutor = nullptr;
+
+		mCont = {};
+
+		mRoundIdx = 0;
+		mRunning = false;
+		mSentHeader = false;
+		mNextSlot = 1;
+		mHaveHeader = false;
+		mActiveRecv = false;
+		mActiveSend = false;
+	}
+
 #ifdef COPROTO_LOGGING
 	void Scheduler::logEdge(Resumable& parent, Resumable& child, bool dashed)
 	{

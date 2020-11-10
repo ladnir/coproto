@@ -1,5 +1,5 @@
 #include "LocalEvaluator.h"
-
+#include "Buffers.h"
 
 namespace coproto
 {
@@ -64,11 +64,12 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
-		assert(mEval);
-		error_code ec = mEval->getError();
-		if (ec)
-			return ec;
-
+		if (mEval)
+		{
+			error_code ec = mEval->getError();
+			if (ec)
+				return ec;
+		}
 		const auto vec = mInbound.pop();
 
 		if (vec.size() == 0)
@@ -90,16 +91,18 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
-		assert(mEval);
-		error_code ec = mEval->getError();
-		if (ec)
-			return ec;
+		if (mEval)
+		{
+			error_code ec = mEval->getError();
+			if (ec)
+				return ec;
+		}
 
 		mOther->mInbound.emplace(data.begin(), data.end());
 		return {};
 	}
 
-	error_code LocalEvaluator::execute(Resumable& p0, Resumable& p1, Type type)
+	error_code LocalEvaluator::execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type)
 	{
 #ifdef COPROTO_LOGGING
 		if (p0.mName.size() == 0)
@@ -109,59 +112,42 @@ namespace coproto
 #endif
 
 		mOpIdx = 0;
-		p0.mSlotIdx = 0;
-		p1.mSlotIdx = 0;
-		mScheds[0].scheduleReady(p0);
-		mScheds[1].scheduleReady(p1);
-		mScheds[0].mRoundIdx = 0;
-		mScheds[1].mRoundIdx = 0;
+		//p0.mSlotIdx = 0;
+		//p1.mSlotIdx = 0;
+		//mScheds[0].scheduleReady(p0);
+		//mScheds[1].scheduleReady(p1);
+		//mScheds[0].mRoundIdx = 0;
+		//mScheds[1].mRoundIdx = 0;
 
-		
+		bool print = false;
 
 		if (type == Type::interlace)
 		{
 
-			mScheds[0].mSock = &mSocks[0];
-			mScheds[1].mSock = &mSocks[1];
+			//mScheds[0].mSock = &mSocks[0];
+			//mScheds[1].mSock = &mSocks[1];
 			mSocks[0].mEval = this;
 			mSocks[1].mEval = this;
 
-			while (
-				mScheds[0].done() == false ||
-				mScheds[1].done() == false)
+
+
+			while (!p0->done() || !p1->done())
 			{
 
-				if (mScheds[0].done() == false)
+				if (!p0->done())
 				{
-					mScheds[0].run();
-
-					if (mScheds[0].done())
-					{
-						auto e0 = p0.getErrorCode();
-						if (e0)
-							return e0;
-					}
+					p0.evaluate(mSocks[0]);
 
 					sendMsgs(0);
-					if (mScheds[0].mPrint)
+					if (print)
 						std::cout << "-------------- p0 suspend --------------" << std::endl;
 				}
-
-				if (mScheds[1].done() == false)
+				if (!p1->done())
 				{
-					mScheds[1].run();
-
-
-					if (mScheds[1].done())
-					{
-						auto e1 = p1.getErrorCode();
-						if (e1)
-							return e1;
-					}
+					p1.evaluate(mSocks[1]);
 
 					sendMsgs(1);
-
-					if (mScheds[0].mPrint)
+					if (print)
 						std::cout << "-------------- p1 suspend --------------" << std::endl;
 				}
 			}
@@ -169,50 +155,23 @@ namespace coproto
 		}
 		else if (type == Type::blocking)
 		{
-			mScheds[0].mSock = &mBlkSocks[0];
-			mScheds[1].mSock = &mBlkSocks[1];
-
 			mBlkSocks[0].mEval = this;
 			mBlkSocks[1].mEval = this;
-
 			mBlkSocks[0].mOther = &mBlkSocks[1];
 			mBlkSocks[1].mOther = &mBlkSocks[0];
 
 			auto thrd = std::thread([&]() {
-				mScheds[0].run();
-
-				//if (p0.getErrorCode())
-				//	mBlkSocks[1].mInbound.emplace();
-
+				p0.evaluate(mBlkSocks[0]);
 				});
 
-
-			mScheds[1].run();
-
-			//if (p1.getErrorCode())
-			//	mBlkSocks[0].mInbound.emplace();
+			p1.evaluate(mBlkSocks[1]);
 
 			thrd.join();
-
-			if (p0.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
-			if (p1.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
-
-			auto e0 = p0.getErrorCode();
-			if (e0)
-				return e0;
-			auto e1 = p1.getErrorCode();
-			if (e1)
-				return e1;
 
 		}
 		else if (type == Type::async)
 		{
 
-			mScheds[0].mASock = &mAsyncSock[0];
-			mScheds[1].mASock = &mAsyncSock[1];
-
 			auto socketWorker = AsyncSock::Worker();
 			mAsyncSock[0].mIdx = 0;
 			mAsyncSock[1].mIdx = 1;
@@ -221,28 +180,24 @@ namespace coproto
 			socketWorker.mEval = this;
 			socketWorker.mEval = this;
 
-			mScheds[0].run();
-			mScheds[1].run();
-			//mScheds[0].run();
+			ThreadExecutor ex;
+			bool done = false;
+			auto cc = [&](error_code ec) {
+				if (done)
+					ex.stop();
+				else
+					done = true;
+			};
 
-			if (p0.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
-			if (p1.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
+			p0.evaluate(mAsyncSock[0], cc, ex);
+			p1.evaluate(mAsyncSock[1], cc, ex);
 
-			auto e0 = p0.getErrorCode();
-			if (e0)
-				return e0;
-			auto e1 = p1.getErrorCode();
-			if (e1)
-				return e1;
+			ex.run();
+
 		}
 		else if (type == Type::asyncThread)
 		{
 
-			mScheds[0].mASock = &mAsyncSock[0];
-			mScheds[1].mASock = &mAsyncSock[1];
-
 			auto socketWorker = AsyncSock::Worker();
 			mAsyncSock[0].mIdx = 0;
 			mAsyncSock[1].mIdx = 1;
@@ -250,54 +205,42 @@ namespace coproto
 			mAsyncSock[1].mWorker = &socketWorker;
 			socketWorker.mEval = this;
 			socketWorker.mEval = this;
-
 			socketWorker.startThread();
+
 			ThreadExecutor ex;
-			mScheds[0].mExecutor = &ex;
-			mScheds[1].mExecutor = &ex;
-
-			ex.dispatch([&]() { mScheds[0].run(); });
-			ex.dispatch([&]() { mScheds[1].run(); });
-
 
 			std::array<bool, 2> done = { false, false };
 			
 			auto cc = [&](error_code ec,u64 p) {
-
-				if (ec)
-					mAsyncSock[p].cancel();
-				else
-					mAsyncSock[p].stop();
 				if (done[p^1])
 					ex.stop();
 				else
 					done[p] = true;
 			};
 
-			mScheds[0].mCont = [&](error_code ec) { cc(ec, 0); };
-			mScheds[1].mCont = [&](error_code ec) { cc(ec, 1); };
+			p0.evaluate(mAsyncSock[0], [&](error_code ec) { cc(ec, 0); }, ex);
+			p1.evaluate(mAsyncSock[1], [&](error_code ec) { cc(ec, 1); }, ex);
 
 			ex.run();
 			socketWorker.join();
 
-
-			if (p0.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
-			if (p1.done() == false)
-				throw std::runtime_error(COPROTO_LOCATION);
-
-			auto e0 = p0.getErrorCode();
-			if (e0)
-				return e0;
-			auto e1 = p1.getErrorCode();
-			if (e1)
-				return e1;
 		}
 		else
 		{
 			throw std::runtime_error(COPROTO_LOCATION);
 		}
 
+		if (p0->done() == false)
+			throw std::runtime_error(COPROTO_LOCATION);
+		if (p1->done() == false)
+			throw std::runtime_error(COPROTO_LOCATION);
+
+		auto e0 = p0->getErrorCode();
+		if (e0)
+			return e0;
+		auto e1 = p1->getErrorCode();
+		if (e1)
+			return e1;
 		return {};
 	}
 

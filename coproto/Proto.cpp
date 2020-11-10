@@ -211,9 +211,9 @@ namespace coproto
 
 				if (LocalEvaluator::interlace)
 				{
-					if (sched.mScheds[0].numRounds() != 6)
+					if (p0.mBase.mSched->numRounds() != 6)
 						throw std::runtime_error("num round");
-					if (sched.mScheds[1].numRounds() != 6)
+					if (p1.mBase.mSched->numRounds() != 6)
 						throw std::runtime_error("num round");
 				}
 			}
@@ -730,9 +730,6 @@ namespace coproto
 				//std::cout << sched.mScheds[1].getDot() << std::endl;
 				if (ec)
 					throw std::runtime_error(ec.message());
-
-				auto r0 = sched.mScheds[0].numRounds();
-				auto r1 = sched.mScheds[1].numRounds();
 			}
 			//if (r0 != n + 1)
 			//	throw std::runtime_error("num round");
@@ -819,9 +816,9 @@ namespace coproto
 
 				if (t == LocalEvaluator::interlace)
 				{
-					if (sched.mScheds[0].numRounds() != 2)
+					if (p0.mBase.mSched->numRounds() != 2)
 						throw std::runtime_error("num round");
-					if (sched.mScheds[1].numRounds() != 1)
+					if (p1.mBase.mSched->numRounds() != 1)
 						throw std::runtime_error("num round");
 				}
 				if (ec)
