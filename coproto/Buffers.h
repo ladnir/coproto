@@ -1,115 +1,17 @@
 #pragma once
-#include "Defines.h"
-#include "TypeTraits.h"
+#include "coproto/Defines.h"
+#include "coproto/TypeTraits.h"
 #include <cassert>
-#include "error_code.h"
+#include "coproto/error_code.h"
 #include <iostream>
 #include <memory>
-#include "InlinePoly.h"
-#include "Proto.h"
+#include "coproto/InlinePoly.h"
+#include "coproto/Proto.h"
 
 namespace coproto
 {
 	std::string hexPtr(void* p);
-	namespace internal
-	{
 
-		template<typename Container>
-		requires is_resizable_trivial_container_v<Container>
-			error_code tryResize(u64 size, Container& container)
-		{
-			if (size % sizeof(typename Container::value_type))
-				return code::badBufferSize;
-			try {
-				container.resize(size / sizeof(typename Container::value_type));
-				return {};
-			}
-			catch (...)
-			{
-				return code::badBufferSize;
-			}
-		}
-
-		template<typename Container>
-		requires (!is_resizable_trivial_container_v<Container>)
-			error_code tryResize(u64 size, Container& container)
-		{
-			return code::noResizeSupport;
-		}
-
-		template<typename Container>
-		requires is_trivial_container_v<Container>
-			span<u8> asSpan(Container& container)
-		{
-			return span<u8>((u8*)container.data(), container.size() * sizeof(typename Container::value_type));
-		}
-
-		template<typename ValueType>
-		requires std::is_trivial_v<ValueType>
-			span<u8> asSpan(ValueType& container)
-		{
-			return span<u8>((u8*)&container, sizeof(ValueType));
-		}
-	}
-
-
-	struct SendOp
-	{
-		virtual ~SendOp() {}
-		virtual span<u8> asSpan() = 0;
-
-	};
-
-	template<typename Container>
-	struct RefSendBuffer : public SendOp
-	{
-		Container& mCont;
-
-		RefSendBuffer(Container& c)
-			: mCont(c)
-		{}
-
-		RefSendBuffer(RefSendBuffer&&) = default;
-
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mCont);
-		}
-
-	};
-
-
-	template<typename Container>
-	struct MvSendBuffer : public SendOp
-	{
-		Container mCont;
-
-		MvSendBuffer(Container&& c)
-			:mCont(std::forward<Container>(c))
-		{}
-
-		span<u8> asSpan() override
-		{
-			return internal::asSpan(mCont);
-		}
-
-	};
-
-
-	struct SendBuffer
-	{
-		internal::InlinePoly<SendOp, sizeof(u64) * 8> mStorage;
-
-		span<u8> asSpan() {
-			return mStorage->asSpan();
-		}
-	};
-
-
-	struct RecvBuffer
-	{
-		virtual span<u8> asSpan(u64 resize) = 0;
-	};
 
 
 	struct SendProto : public Resumable
@@ -402,50 +304,50 @@ namespace coproto
 
 
 	template<typename Container>
-	Proto<void> send(Container& t)
+	ProtoV<void> send(Container& t)
 	{
-		Proto<void> proto;
+		ProtoV<void> proto;
 		proto.mBase.emplace<RefSendProto<Container>>(t);
 		return proto;
 	}
 
 	template<typename Container>
-	Proto<void> send(Container&& t)
+	ProtoV<void> send(Container&& t)
 	{
-		Proto<void> proto;
+		ProtoV<void> proto;
 		proto.mBase.emplace<MvSendProto<Container>>(std::forward<Container>(t));
 		return proto;
 	}
 
 
 	template<typename Container>
-	Proto<void> recv(Container& t)
+	ProtoV<void> recv(Container& t)
 	{
-		Proto<void> proto;
+		ProtoV<void> proto;
 		proto.mBase.emplace<RefRecvProto<Container>>(t);
 		return proto;
 	}
 
 
 	template<typename Container>
-	Proto<void> recvFixedSize(Container& t)
+	ProtoV<void> recvFixedSize(Container& t)
 	{
-		Proto<void> proto;
+		ProtoV<void> proto;
 		proto.mBase.emplace<RefRecvProto<Container, false>>(t);
 		return proto;
 	}
 
 
 	template<typename Container>
-	Proto<Container> recv()
+	ProtoV<Container> recv()
 	{
-		Proto<Container> proto;
+		ProtoV<Container> proto;
 		proto.mBase.emplace<MoveRecvProto<Container>>();
 		return proto;
 	}
 
 	template<typename value_type>
-	Proto<std::vector<value_type>> recvVec()
+	ProtoV<std::vector<value_type>> recvVec()
 	{
 		return recv<std::vector<value_type>>();
 	}

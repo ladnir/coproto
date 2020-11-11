@@ -1,10 +1,10 @@
 #pragma once
-#include "Scheduler.h"
-#include "Proto.h"
+#include "coproto/Scheduler.h"
+#include "coproto/Proto.h"
 #include <cassert>
 
 
-#include "Queue.h"
+#include "coproto/Queue.h"
 
 namespace coproto
 {

@@ -1,13 +1,13 @@
 
 #define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
-#include "Proto.h"
+#include "coproto/Proto.h"
 #include <algorithm>
 #include <numeric>
 #include <string>
 
-#include "Buffers.h"
-#include "LocalEvaluator.h"
+#include "coproto/Buffers.h"
+#include "coproto/LocalEvaluator.h"
 
 namespace coproto
 {
@@ -29,7 +29,7 @@ namespace coproto
 		auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
 
 
-		Proto<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
+		ProtoV<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
 #ifdef COPROTO_LOGGING
 			auto np = name + "_server_" + std::to_string(i) + "_" + std::to_string(length);
@@ -88,7 +88,7 @@ namespace coproto
 				co_return 0;
 			}
 		}
-		Proto<int> echoClient(u64 i, u64 length, u64 rep, std::string name, bool v)
+		ProtoV<int> echoClient(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
 #ifdef COPROTO_LOGGING
 			auto np = name + "_client_" + std::to_string(i) + "_" + std::to_string(length);
@@ -150,7 +150,7 @@ namespace coproto
 
 		void strSendRecvTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
 
 				for (u64 i = 0; i < 5; ++i)
@@ -222,7 +222,7 @@ namespace coproto
 
 		void resultSendRecvTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
 				//co_await Name("main");
 
@@ -283,7 +283,7 @@ namespace coproto
 		void returnValueTest()
 		{
 			int val = 42;
-			auto proto = [val](bool party) -> Proto<int> {
+			auto proto = [val](bool party) -> ProtoV<int> {
 				std::string str("hello from 0");
 				co_return val;
 			};
@@ -309,7 +309,7 @@ namespace coproto
 
 		void typedRecvTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				std::vector<u64> buff, rBuff;
 				for (u64 i = 0; i < 5; ++i)
@@ -361,7 +361,7 @@ namespace coproto
 
 		void zeroSendRecvTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				std::vector<u64> buff;
 				co_await send(buff);
@@ -382,7 +382,7 @@ namespace coproto
 
 		void badRecvSizeTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				std::vector<u64> buff(3);
 
@@ -410,7 +410,7 @@ namespace coproto
 
 		void zeroSendErrorCodeTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				std::vector<u64> buff;
 				auto ec = co_await send(buff).wrap();
@@ -432,7 +432,7 @@ namespace coproto
 
 		void badRecvSizeErrorCodeTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				std::vector<u64> buff(3);
 
@@ -486,7 +486,7 @@ namespace coproto
 
 		void throwsTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				if (party)
 					throw std::runtime_error("");
@@ -511,7 +511,7 @@ namespace coproto
 
 		void nestedSendRecvTest()
 		{
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
 				u64 n = 5;
 				if (party)
@@ -549,7 +549,7 @@ namespace coproto
 		}
 
 
-		Proto<> throwServer(u64 i)
+		Proto throwServer(u64 i)
 		{
 			auto msg = co_await recv<std::string>();
 			co_await send((msg));
@@ -560,7 +560,7 @@ namespace coproto
 				throw std::runtime_error("");
 		}
 
-		Proto<> throwClient(u64 i)
+		Proto throwClient(u64 i)
 		{
 			auto msg = std::string("hello world");
 			co_await send(msg);
@@ -576,7 +576,7 @@ namespace coproto
 		void nestedProtocolThrowTest()
 		{
 
-			auto proto = [](bool party) -> Proto<> {
+			auto proto = [](bool party) -> Proto {
 
 				if (party)
 				{
@@ -608,7 +608,7 @@ namespace coproto
 		{
 			bool hasEc = false;
 			u64 n = 5;
-			auto proto = [&hasEc, n](bool party) -> Proto<> {
+			auto proto = [&hasEc, n](bool party) -> Proto {
 
 				if (party)
 				{
@@ -652,7 +652,7 @@ namespace coproto
 			bool print = false;
 			u64 n = 40;
 			u64 rep = 8;
-			auto proto = [n, print, rep](bool party) -> Proto<> {
+			auto proto = [n, print, rep](bool party) -> Proto {
 
 				if (party)
 				{
@@ -741,7 +741,7 @@ namespace coproto
 		void asyncThrowProtocolTest()
 		{
 			u64 n = 3;
-			auto proto = [n](bool party) -> Proto<> {
+			auto proto = [n](bool party) -> Proto {
 
 				if (party)
 				{
@@ -781,25 +781,25 @@ namespace coproto
 		void endOfRoundTest()
 		{
 
-			auto recvProto = [&]() -> Proto<> {
+			auto recvProto = [&]() -> Proto {
 				std::vector<u8> msg;
 				co_await recv(msg);
 				co_await EndOfRound();
 				co_await send(msg);
 			};
-			auto sendProto = [&]() -> Proto<> {
+			auto sendProto = [&]() -> Proto {
 				std::vector<u8> msg(10);
 				co_await send(msg);
 				co_await EndOfRound();
 				co_await recv(msg);
 			};
 
-			auto recvProto2 = [&]() -> Proto<> {
+			auto recvProto2 = [&]() -> Proto {
 				std::vector<u8> msg(10);
 				co_await recvProto();
 				co_await send(msg);
 			};
-			auto sendProto2 = [&]() -> Proto<> {
+			auto sendProto2 = [&]() -> Proto {
 				std::vector<u8> msg;
 				co_await sendProto();
 				co_await recv(msg);
@@ -832,7 +832,7 @@ namespace coproto
 			bool print = false;
 			u64 n = 3;
 			u64 rep = 2;
-			auto proto = [n, print, rep](bool party) -> Proto<> {
+			auto proto = [n, print, rep](bool party) -> Proto {
 
 				if (party)
 				{

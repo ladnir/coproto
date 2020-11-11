@@ -1,7 +1,7 @@
-#include "Scheduler.h"
-#include "Proto.h"
+#include "coproto/Scheduler.h"
+#include "coproto/Proto.h"
 #include <sstream>
-#include "Buffers.h"
+#include "coproto/Buffers.h"
 
 namespace coproto
 {

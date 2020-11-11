@@ -1,6 +1,6 @@
 
 
-#include "Tests.h"
+#include "coproto/Tests.h"
 
 
 int main(int argc, char** argv)

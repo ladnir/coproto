@@ -1,11 +1,12 @@
 #pragma once
-#include "Defines.h"
-#include "error_code.h"
+#include "coproto/Defines.h"
+#include "coproto/error_code.h"
+#include "coproto/Resumable.h"
 #include <list>
 #include <functional>
 #include <array>
 
-#include "Queue.h"
+#include "coproto/Queue.h"
 
 namespace coproto
 {
@@ -38,10 +39,6 @@ namespace coproto
 	};
 
 	extern std::atomic<u64> gProtoIdx;
-
-	class Resumable;
-	struct SendBuffer;
-	struct RecvBuffer;
 
 	struct AsyncSocket
 	{

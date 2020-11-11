@@ -1,6 +1,6 @@
 #pragma once
-#include "Defines.h"
-#include "Scheduler.h"
+#include "coproto/Defines.h"
+#include "coproto/Scheduler.h"
 
 
 namespace coproto

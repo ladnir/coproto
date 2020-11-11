@@ -1,9 +1,9 @@
 #pragma once
-#include "error_code.h"
+#include "coproto/error_code.h"
 #include <variant>
 #include <coroutine>
-#include "Resumable.h"
-#include "InlinePoly.h"
+#include "coproto/Resumable.h"
+#include "coproto/InlinePoly.h"
 #include <cassert>
 
 namespace coproto
@@ -221,7 +221,7 @@ namespace coproto
         public:
 
             using value_type = typename internal::ResultPromiseHelper<T>::type;
-            using type = Proto<value_type>;
+            using type = ProtoV<value_type>;
 
             internal::InlinePoly<Resumable, inlineSize> mBase;
 

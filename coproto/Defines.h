@@ -27,7 +27,7 @@ namespace coproto
 
 
     template<typename T>
-    class Proto;
+    class ProtoV;
 
     std::string hexPtr(void*);
 

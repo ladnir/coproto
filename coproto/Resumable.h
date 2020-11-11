@@ -1,7 +1,8 @@
 #pragma once
-#include "Defines.h"
-#include "error_code.h"
-#include "InlineVector.h"
+#include "coproto/Defines.h"
+#include "coproto/error_code.h"
+#include "coproto/InlineVector.h"
+#include "coproto/InlinePoly.h"
 
 namespace coproto
 {
@@ -47,5 +48,106 @@ namespace coproto
 		virtual std::exception_ptr getExpPtr() = 0;
 		virtual error_code getErrorCode() = 0;
 	};
+
+
+	namespace internal
+	{
+
+		template<typename Container>
+		requires is_resizable_trivial_container_v<Container>
+			error_code tryResize(u64 size, Container& container)
+		{
+			if (size % sizeof(typename Container::value_type))
+				return code::badBufferSize;
+			try {
+				container.resize(size / sizeof(typename Container::value_type));
+				return {};
+			}
+			catch (...)
+			{
+				return code::badBufferSize;
+			}
+		}
+
+		template<typename Container>
+		requires (!is_resizable_trivial_container_v<Container>)
+			error_code tryResize(u64 size, Container& container)
+		{
+			return code::noResizeSupport;
+		}
+
+		template<typename Container>
+		requires is_trivial_container_v<Container>
+			span<u8> asSpan(Container& container)
+		{
+			return span<u8>((u8*)container.data(), container.size() * sizeof(typename Container::value_type));
+		}
+
+		template<typename ValueType>
+		requires std::is_trivial_v<ValueType>
+			span<u8> asSpan(ValueType& container)
+		{
+			return span<u8>((u8*)&container, sizeof(ValueType));
+		}
+	}
+
+	struct SendOp
+	{
+		virtual ~SendOp() {}
+		virtual span<u8> asSpan() = 0;
+
+	};
+
+	template<typename Container>
+	struct RefSendBuffer : public SendOp
+	{
+		Container& mCont;
+
+		RefSendBuffer(Container& c)
+			: mCont(c)
+		{}
+
+		RefSendBuffer(RefSendBuffer&&) = default;
+
+		span<u8> asSpan() override
+		{
+			return internal::asSpan(mCont);
+		}
+
+	};
+
+
+	template<typename Container>
+	struct MvSendBuffer : public SendOp
+	{
+		Container mCont;
+
+		MvSendBuffer(Container&& c)
+			:mCont(std::forward<Container>(c))
+		{}
+
+		span<u8> asSpan() override
+		{
+			return internal::asSpan(mCont);
+		}
+
+	};
+
+
+	struct SendBuffer
+	{
+		internal::InlinePoly<SendOp, sizeof(u64) * 8> mStorage;
+
+		span<u8> asSpan() {
+			return mStorage->asSpan();
+		}
+	};
+
+
+	struct RecvBuffer
+	{
+		virtual span<u8> asSpan(u64 resize) = 0;
+	};
+
 
 }

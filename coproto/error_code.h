@@ -23,7 +23,8 @@ namespace coproto
 		noAsyncSupport,
 		//An uncaught exception was thrown during the protocol. ";
 		uncaughtException,
-		invalidArguments
+		invalidArguments,
+		endOfRound
 	};
 }
 namespace std {

@@ -1,10 +1,10 @@
 #define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
-#include "Tests.h"
+#include "coproto/Tests.h"
 
-#include "Buffers.h"
-#include "Proto.h"
-#include "InlinePoly.h"
+#include "coproto/Buffers.h"
+#include "coproto/Proto.h"
+#include "coproto/InlinePoly.h"
 
 #ifdef _MSC_VER
 #include <windows.h>

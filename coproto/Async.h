@@ -1,9 +1,9 @@
 #pragma once
 #include <coroutine>
-#include "Resumable.h"
-#include "Scheduler.h"
-#include "error_code.h"
-#include "InlinePoly.h"
+#include "coproto/Resumable.h"
+#include "coproto/Scheduler.h"
+#include "coproto/error_code.h"
+#include "coproto/InlinePoly.h"
 #include <cassert>
 
 namespace coproto

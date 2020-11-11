@@ -7,16 +7,16 @@
 #include <iostream>
 #include <optional>
 
-#include "Defines.h"
-#include "Scheduler.h"
-#include "Result.h"
-#include "InlineVector.h"
-#include "InlinePoly.h"
-#include "Async.h"
-#include "EndOfRound.h"
-#include "Name.h"
-#include "Resumable.h"
-//#include ""
+#include "coproto/Defines.h"
+#include "coproto/Scheduler.h"
+#include "coproto/Result.h"
+#include "coproto/InlineVector.h"
+#include "coproto/InlinePoly.h"
+#include "coproto/Async.h"
+#include "coproto/EndOfRound.h"
+#include "coproto/Name.h"
+#include "coproto/Resumable.h"
+//#include "coproto/"
 #include <cassert>
 
 
@@ -70,7 +70,7 @@ namespace coproto
 	}
 
 	template<typename T = void>
-	class Proto
+	class ProtoV
 	{
 	public:
 		using promise_type = internal::ProtoPromise<T>;
@@ -87,9 +87,9 @@ namespace coproto
 			return r;
 		}
 
-		Proto<Async<T>> async()
+		ProtoV<Async<T>> async()
 		{
-			Proto<Async<T>> r;
+			ProtoV<Async<T>> r;
 			r.mBase.setOwned(new internal::AsyncPromise<T>(std::move(mBase)));
 			return r;
 		}
@@ -117,6 +117,7 @@ namespace coproto
 			return mBase;
 		}
 	};
+	using Proto = ProtoV<void>;
 
 
 	namespace internal
@@ -126,11 +127,11 @@ namespace coproto
 		class ProtoAwaiter
 		{
 		public:
-			Proto<T> mTask;
+			ProtoV<T> mTask;
 			using coro_handle = std::coroutine_handle<ProtoPromise<U>>;
 			coro_handle mHandle;
 
-			ProtoAwaiter(coro_handle handle, Proto<T>&& t)
+			ProtoAwaiter(coro_handle handle, ProtoV<T>&& t)
 				: mTask(std::move(t))
 				, mHandle(handle)
 			{
@@ -227,9 +228,9 @@ namespace coproto
 				return coro_handle::from_promise(*this);
 			}
 
-			Proto<T> get_return_object()
+			ProtoV<T> get_return_object()
 			{
-				Proto<T> r;
+				ProtoV<T> r;
 				r.mBase.setBorrowed(this);
 				return r;
 			}
@@ -242,7 +243,7 @@ namespace coproto
 			}
 
 			template<typename U>
-			ProtoAwaiter<U, T> await_transform(Proto<U>&& p);
+			ProtoAwaiter<U, T> await_transform(ProtoV<U>&& p);
 			template<typename U>
 			AsyncAwaiter<U> await_transform(Async<U>&& p);
 			template<typename U>
@@ -318,9 +319,10 @@ namespace coproto
 		};
 
 
+
 		template<typename T>
 		template<typename U>
-		inline ProtoAwaiter<U, T> ProtoPromise<T>::await_transform(Proto<U>&& p)
+		inline ProtoAwaiter<U, T> ProtoPromise<T>::await_transform(ProtoV<U>&& p)
 		{
 			return ProtoAwaiter<U, T>(
 				coro_handle::from_promise(*this),
@@ -358,6 +360,8 @@ namespace coproto
 			}
 			return true;
 		}
+
+
 	}
 
 

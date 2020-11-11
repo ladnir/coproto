@@ -1,4 +1,4 @@
-#include "InlinePoly.h"
+#include "coproto/InlinePoly.h"
 #include <iostream>
 #include <sstream>
 #include <vector>

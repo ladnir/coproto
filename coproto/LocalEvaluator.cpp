@@ -1,5 +1,5 @@
-#include "LocalEvaluator.h"
-#include "Buffers.h"
+#include "coproto/LocalEvaluator.h"
+#include "coproto/Buffers.h"
 
 namespace coproto
 {
