@@ -55,25 +55,21 @@ namespace coproto
 
 		template<typename Container>
 		requires is_resizable_trivial_container_v<Container>
-			error_code tryResize(u64 size, Container& container)
+			void tryResize(u64 size, Container& container)
 		{
-			if (size % sizeof(typename Container::value_type))
-				return code::badBufferSize;
 			try {
-				container.resize(size / sizeof(typename Container::value_type));
-				return {};
+				if ((size % sizeof(typename Container::value_type)) == 0)
+					container.resize(size / sizeof(typename Container::value_type));
 			}
 			catch (...)
 			{
-				return code::badBufferSize;
 			}
 		}
 
 		template<typename Container>
 		requires (!is_resizable_trivial_container_v<Container>)
-			error_code tryResize(u64 size, Container& container)
+			void tryResize(u64 size, Container& container)
 		{
-			return code::noResizeSupport;
 		}
 
 		template<typename Container>

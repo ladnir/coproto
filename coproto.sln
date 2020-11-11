@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "coproto", "coproto\coproto.vcxproj", "{B4662FB2-6F69-470C-8EEA-F3E19DC39382}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "coprotoTests", "coprotoTests\coprotoTests.vcxproj", "{7469AFE6-5260-43A4-816E-5914B660D426}"
+	ProjectSection(ProjectDependencies) = postProject
+		{B4662FB2-6F69-470C-8EEA-F3E19DC39382} = {B4662FB2-6F69-470C-8EEA-F3E19DC39382}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

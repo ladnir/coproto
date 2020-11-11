@@ -157,6 +157,7 @@
     <ClInclude Include="InlinePoly.h" />
     <ClInclude Include="LocalEvaluator.h" />
     <ClInclude Include="Name.h" />
+    <ClInclude Include="NativeProto.h" />
     <ClInclude Include="Queue.h" />
     <ClInclude Include="Result.h" />
     <ClInclude Include="Resumable.h" />
@@ -171,6 +172,7 @@
     <ClCompile Include="InlinePoly.cpp" />
     <ClCompile Include="error_code.cpp" />
     <ClCompile Include="LocalEvaluator.cpp" />
+    <ClCompile Include="NativeProto.cpp" />
     <ClCompile Include="Proto.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="InlineVector.cpp" />

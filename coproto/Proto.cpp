@@ -26,8 +26,9 @@ namespace coproto
 	namespace tests
 	{
 
-		auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
-
+		namespace {
+			auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
+		}
 
 		ProtoV<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
@@ -148,7 +149,7 @@ namespace coproto
 
 
 
-		void strSendRecvTest()
+		void coawait_strSendRecv_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
@@ -220,7 +221,7 @@ namespace coproto
 		}
 
 
-		void resultSendRecvTest()
+		void coawait_resultSendRecv_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
@@ -280,7 +281,7 @@ namespace coproto
 		}
 
 
-		void returnValueTest()
+		void coawait_returnValue_Test()
 		{
 			int val = 42;
 			auto proto = [val](bool party) -> ProtoV<int> {
@@ -307,7 +308,7 @@ namespace coproto
 		}
 
 
-		void typedRecvTest()
+		void coawait_typedRecv_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -359,7 +360,7 @@ namespace coproto
 
 
 
-		void zeroSendRecvTest()
+		void coawait_zeroSendRecv_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -380,7 +381,7 @@ namespace coproto
 		}
 
 
-		void badRecvSizeTest()
+		void coawait_badRecvSize_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -408,7 +409,7 @@ namespace coproto
 		}
 
 
-		void zeroSendErrorCodeTest()
+		void coawait_zeroSend_ErrorCode_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -430,7 +431,7 @@ namespace coproto
 		}
 
 
-		void badRecvSizeErrorCodeTest()
+		void coawait_badRecvSize_ErrorCode_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -484,7 +485,7 @@ namespace coproto
 			}
 		}
 
-		void throwsTest()
+		void coawait_throws_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -509,7 +510,7 @@ namespace coproto
 			}
 		}
 
-		void nestedSendRecvTest()
+		void coawait_nestedSendRecv_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
@@ -573,7 +574,7 @@ namespace coproto
 				co_await throwClient(i - 1);
 		}
 
-		void nestedProtocolThrowTest()
+		void coawait_nestedProtocolThrow_Test()
 		{
 
 			auto proto = [](bool party) -> Proto {
@@ -604,7 +605,7 @@ namespace coproto
 		}
 
 
-		void nestedProtocolErrorCodeTest()
+		void coawait_nestedProtocol_ErrorCode_Test()
 		{
 			bool hasEc = false;
 			u64 n = 5;
@@ -645,7 +646,7 @@ namespace coproto
 		}
 
 
-		void asyncProtocolTest()
+		void coawait_asyncProtocol_Test()
 		{
 
 #define MULTI
@@ -738,7 +739,7 @@ namespace coproto
 
 		}
 
-		void asyncThrowProtocolTest()
+		void coawait_asyncThrowProtocol_Test()
 		{
 			u64 n = 3;
 			auto proto = [n](bool party) -> Proto {
@@ -778,7 +779,7 @@ namespace coproto
 		}
 
 
-		void endOfRoundTest()
+		void coawait_endOfRound_Test()
 		{
 
 			auto recvProto = [&]() -> Proto {
@@ -826,7 +827,7 @@ namespace coproto
 			}
 		}
 
-		void errorSocketTest()
+		void coawait_errorSocket_Test()
 		{
 #define MULTI
 			bool print = false;

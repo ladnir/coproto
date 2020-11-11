@@ -367,28 +367,28 @@ namespace coproto
 
 	namespace tests
 	{
-		void strSendRecvTest();
-		void resultSendRecvTest();
-		void returnValueTest();
-		void typedRecvTest();
-
-		void zeroSendRecvTest();
-		void badRecvSizeTest();
-
-		void zeroSendErrorCodeTest();
-		void badRecvSizeErrorCodeTest();
-
-		void throwsTest();
-
-		void nestedSendRecvTest();
-		void nestedProtocolThrowTest();
-		void nestedProtocolErrorCodeTest();
-		void asyncProtocolTest();
-		void asyncThrowProtocolTest();
-
-		void endOfRoundTest();
+		void coawait_strSendRecv_Test();
+		void coawait_resultSendRecv_Test();
+		void coawait_returnValue_Test();
+		void coawait_typedRecv_Test();
 		
-		void errorSocketTest();
+		void coawait_zeroSendRecv_Test();
+		void coawait_zeroSendRecv_ErrorCode_Test();
+
+		void coawait_badRecvSize_Test();
+		void coawait_badRecvSize_ErrorCode_Test();
+
+		void coawait_throws_Test();
+		
+		void coawait_nestedProtocol_Test();
+		void coawait_nestedProtocol_Throw_Test();
+		void coawait_nestedProtocol_ErrorCode_Test();
+		
+		void coawait_asyncProtocol_Test();
+		void coawait_asyncProtocol_Throw_Test();
+		
+		void coawait_endOfRound_Test();
+		void coawait_errorSocket_Test();
 
 	}
 
