@@ -7,6 +7,7 @@ namespace coproto
 {
 	struct EndOfRound { };
 
+#ifdef COPROTO_CPP20
 	struct EndOfRoundAwaiter
 	{
 		using coro_handle = std::coroutine_handle<void>;
@@ -32,5 +33,7 @@ namespace coproto
 		{
 		}
 	};
+#endif // COPROTO_CPP20
+
 }
 

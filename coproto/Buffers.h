@@ -117,8 +117,9 @@ namespace coproto
 
 		span<u8> asSpan(u64 size) override
 		{
-			if constexpr (allowResize)
+			if (allowResize)
 				internal::tryResize(size, mContainer);
+
 			return internal::asSpan(mContainer);
 		}
 

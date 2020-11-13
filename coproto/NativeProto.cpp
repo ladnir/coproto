@@ -4,6 +4,12 @@
 namespace coproto
 {
 
+#ifdef COPROTO_CPP17
+#define COPROTO_FALLTHROUGH [[fallthrough]]
+#else
+#define COPROTO_FALLTHROUGH
+#endif
+
 
 #define CP_AWAIT(X)					\
 	do{{								\
@@ -14,7 +20,7 @@ namespace coproto
 			return ec;				\
 		}							\
 	}								\
-	[[fallthrough]];case __LINE__: do{}while(0);	\
+	COPROTO_FALLTHROUGH;case __LINE__: do{}while(0);	\
 	}while(0)
 
 
@@ -27,7 +33,7 @@ do{{										\
 		return ec;						\
 	}									\
 }										\
-[[fallthrough]];case __LINE__:			\
+COPROTO_FALLTHROUGH;case __LINE__:			\
 res = std::move(*(typename decltype(X)::return_type*)(this->getAwaitReturn()));\
 }while(0)
 

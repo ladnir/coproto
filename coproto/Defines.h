@@ -3,7 +3,6 @@
 #include "config.h"
 #include <cstdint>
 #include <string>
-#include "span.h"
 
 #define COPRO_STRINGIZE_DETAIL(x) #x
 #define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
@@ -36,8 +35,6 @@ extern u64 mNewIdx;
     typedef int16_t i16;
     typedef uint8_t u8;
     typedef int8_t i8;
-
-    template<typename T> using span = nonstd::span<T>;
 
 
     template<typename T>

@@ -7,6 +7,7 @@
 #include <array>
 
 #include "coproto/Queue.h"
+#include <unordered_map>
 
 namespace coproto
 {

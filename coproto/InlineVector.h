@@ -2,6 +2,7 @@
 #include "coproto/Defines.h"
 #include <cassert>
 #include "coproto/TypeTraits.h"
+#include "coproto/span.h"
 
 namespace coproto
 {
@@ -27,6 +28,7 @@ namespace coproto
 			{
 				assert(!isHeap());
 			}
+
 			InlineVector(const InlineVector& c)
 				: mSpan((T*)&mStorage, 0ull)
 			{
@@ -48,8 +50,9 @@ namespace coproto
 					for (u64 i = 0; i < c.size(); ++i)
 					{
 						new (&mSpan[i]) T(std::move(c.mSpan[i]));
-						if constexpr (std::is_trivially_destructible<T>::value == false)
-							c.mSpan[i].~T();
+						CallDestructor<T>(c.mSpan[i]);
+						//if constexpr (std::is_trivially_destructible<T>::value == false)
+						//	c.mSpan[i].~T();
 					}
 				}
 				else
@@ -99,9 +102,8 @@ namespace coproto
 					new (&mSpan[i]) T{};
 
 
-				if constexpr (std::is_trivially_destructible<T>::value == false)
 					for (u64 i = newSize; i < oldSize; ++i)
-						data()[i].~T();
+						CallDestructor<T>(data()[i]);
 			}
 
 			// prevent the constructor being called
@@ -122,8 +124,8 @@ namespace coproto
 					{
 						new (&newData[i]) T(std::move(mSpan[i]));
 
-						if constexpr (std::is_trivially_destructible<T>::value == false)
-							mSpan[i].~T();
+						//if constexpr (std::is_trivially_destructible<T>::value == false)
+						CallDestructor<T> d(data()[i]);
 					}
 
 					if (isHeap())
@@ -180,8 +182,8 @@ namespace coproto
 			void pop_back()
 			{
 
-				if constexpr (std::is_trivially_destructible<T>::value == false)
-					mSpan.back().~T();
+				//if constexpr (std::is_trivially_destructible<T>::value == false)
+				CallDestructor<T>(mSpan.back());
 
 				mSpan = span<T>(data(), size() - 1);
 			}

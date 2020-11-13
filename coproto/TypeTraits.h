@@ -1,9 +1,19 @@
 #pragma once
 #include <type_traits>
-#include <concepts>
+//#include <concepts>
 
 namespace coproto
 {
+
+	template< class T >
+	struct remove_cvref {
+		using type = typename std::remove_cv<std::remove_reference_t<T>>::type;
+	};
+
+
+	template< class T >
+	using remove_cvref_t = typename remove_cvref<T>::type;
+
 
 	template <bool Cond, typename T = void>
 	using enable_if_t = typename std::enable_if<Cond, T>::type;
@@ -97,11 +107,18 @@ namespace coproto
 		// must have a data() member fn
 		decltype(std::declval<T>().data()),
 
-		// must return value_type*
+		// must return value_type* or const value_type*
 		enable_if_t<
 		std::is_same<
 		decltype(std::declval<T>().data()),
 		typename T::value_type*
+		>::value 
+		||
+		// pre CPP 17 std::string returns a const pointer. So we
+		// will allow this case.
+		std::is_same<
+		decltype(std::declval<T>().data()),
+		const typename T::value_type*
 		>::value
 		>
 		>>
@@ -169,6 +186,23 @@ namespace coproto
 
 	template <typename C, typename... Args>
 	using is_poly_emplaceable = is_poly_emplaceable_<void, C, Args...>;
+
+
+	template<typename T, typename = void>
+	struct CallDestructor
+	{
+		CallDestructor(T&) {}
+	};
+
+	template<typename T>
+	struct CallDestructor<T, void_t<
+		enable_if_t<std::is_trivially_destructible<T>::value == false>
+		>>
+	{
+		CallDestructor(T& t) {
+			t.~T();
+		}
+	};
 //
 //
 //#ifdef COPROTO_CPP20

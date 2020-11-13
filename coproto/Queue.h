@@ -11,32 +11,58 @@ namespace coproto
 	class BlockingQueue
 	{
 	private:
-		std::mutex              d_mutex;
-		std::condition_variable d_condition;
-		std::deque<T>           d_queue;
+		struct State
+		{
+			std::mutex              d_mutex;
+			std::condition_variable d_condition;
+			std::deque<T>           d_queue;
+		};
+
+		std::unique_ptr<State> mState;
 	public:
+
+		BlockingQueue()
+			: mState(std::make_unique<State>())
+		{}
+
+
+		BlockingQueue(BlockingQueue&& q)
+			: mState(std::move(q.mState))
+		{
+			q.mState = std::make_unique<State>();
+		}
+
+		BlockingQueue& operator=(BlockingQueue&& q)
+		{
+			mState = (std::move(q.mState));
+			q.mState = std::make_unique<State>();
+			return *this;
+		}
+
+
+
 		void push(T&& value) {
 			{
-				std::unique_lock<std::mutex> lock(this->d_mutex);
-				d_queue.emplace_front(std::move(value));
+				std::unique_lock<std::mutex> lock(mState->d_mutex);
+				mState->d_queue.emplace_front(std::move(value));
 			}
-			this->d_condition.notify_one();
+			mState->d_condition.notify_one();
 		}
 
 		template<typename... Args>
 		void emplace(Args&&... args) {
 			{
-				std::unique_lock<std::mutex> lock(this->d_mutex);
-				d_queue.emplace_front(std::forward<Args>(args)...);
+				std::unique_lock<std::mutex> lock(mState->d_mutex);
+				mState->d_queue.emplace_front(std::forward<Args>(args)...);
 			}
-			this->d_condition.notify_one();
+			mState->d_condition.notify_one();
 		}
 
 		T pop() {
-			std::unique_lock<std::mutex> lock(this->d_mutex);
-			this->d_condition.wait(lock, [this] { return !this->d_queue.empty(); });
-			T rc(std::move(this->d_queue.back()));
-			this->d_queue.pop_back();
+			std::unique_lock<std::mutex> lock(mState->d_mutex);
+			mState->d_condition.wait(lock, [this] { return !mState->d_queue.empty(); });
+			T rc(std::move(mState->d_queue.back()));
+			mState->d_queue.pop_back();
 			return rc;
 		}
 	};

@@ -3,7 +3,7 @@
 #include "coproto/NativeProto.h"
 
 #include "coproto/Buffers.h"
-#include "coproto/Proto.h"
+#include "coproto/AwaitProto.h"
 #include "coproto/InlinePoly.h"
 
 #ifdef _MSC_VER

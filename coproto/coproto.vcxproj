@@ -116,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>Default</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
     </ClCompile>
@@ -135,7 +135,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>Default</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClInclude Include="Async.h" />
     <ClInclude Include="Buffers.h" />
+    <ClInclude Include="AwaitProto.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="EndOfRound.h" />
     <ClInclude Include="error_code.h" />
@@ -159,6 +160,7 @@
     <ClInclude Include="LocalEvaluator.h" />
     <ClInclude Include="Name.h" />
     <ClInclude Include="NativeProto.h" />
+    <ClInclude Include="Optional.h" />
     <ClInclude Include="Queue.h" />
     <ClInclude Include="Result.h" />
     <ClInclude Include="Resumable.h" />
@@ -168,6 +170,7 @@
     <ClInclude Include="span.h" />
     <ClInclude Include="Tests.h" />
     <ClInclude Include="TypeTraits.h" />
+    <ClInclude Include="Variant.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Async.cpp" />
@@ -175,7 +178,7 @@
     <ClCompile Include="error_code.cpp" />
     <ClCompile Include="LocalEvaluator.cpp" />
     <ClCompile Include="NativeProto.cpp" />
-    <ClCompile Include="Proto.cpp" />
+    <ClCompile Include="AwaitProto.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="InlineVector.cpp" />
     <ClCompile Include="Tests.cpp" />

@@ -1,29 +1,22 @@
 
-#include "coproto/Proto.h"
+#include "coproto/AwaitProto.h"
 #include <algorithm>
 #include <numeric>
 #include <string>
 
 #include "coproto/Buffers.h"
 #include "coproto/LocalEvaluator.h"
+#include "coproto/Tests.h"
+
+
 
 namespace coproto
 {
 
-
-
-
-
-
-
-
-
-
-
-
 	namespace tests
 	{
 
+#ifdef COPROTO_CPP20
 		namespace {
 			auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
 		}
@@ -907,8 +900,40 @@ namespace coproto
 						throw std::runtime_error("error was expected");
 				}
 
-				
+
 			}
 		}
+
+#else
+
+		void throw_not_enabled()
+		{
+			throw UnitTestSkipped("COPROTO_CPP20 not defined.");
+		}
+
+		void coawait_strSendRecv_Test() { throw_not_enabled(); }
+		void coawait_resultSendRecv_Test() { throw_not_enabled(); }
+		void coawait_returnValue_Test() { throw_not_enabled(); }
+		void coawait_typedRecv_Test() { throw_not_enabled(); }
+
+		void coawait_zeroSendRecv_Test() { throw_not_enabled(); }
+		void coawait_zeroSendRecv_ErrorCode_Test() { throw_not_enabled(); }
+
+		void coawait_badRecvSize_Test() { throw_not_enabled(); }
+		void coawait_badRecvSize_ErrorCode_Test() { throw_not_enabled(); }
+
+		void coawait_throws_Test() { throw_not_enabled(); }
+
+		void coawait_nestedProtocol_Test() { throw_not_enabled(); }
+		void coawait_nestedProtocol_Throw_Test() { throw_not_enabled(); }
+		void coawait_nestedProtocol_ErrorCode_Test() { throw_not_enabled(); }
+
+		void coawait_asyncProtocol_Test() { throw_not_enabled(); }
+		void coawait_asyncProtocol_Throw_Test() { throw_not_enabled(); }
+
+		void coawait_endOfRound_Test() { throw_not_enabled(); }
+		void coawait_errorSocket_Test() { throw_not_enabled(); }
+
+#endif
 	}
 }

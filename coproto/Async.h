@@ -1,5 +1,8 @@
 #pragma once
+#ifdef COPROTO_CPP20
 #include <coroutine>
+#endif
+
 #include "coproto/Resumable.h"
 #include "coproto/Scheduler.h"
 #include "coproto/error_code.h"
@@ -197,7 +200,7 @@ namespace coproto
 		};
 
 
-
+#ifdef COPROTO_CPP20
 		template<typename T>
 		class AsyncAwaiter
 		{
@@ -245,6 +248,6 @@ namespace coproto
 				}
 			}
 		};
-
+#endif
 	}
 }

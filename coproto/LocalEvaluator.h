@@ -104,6 +104,9 @@ namespace coproto
 
 			struct Worker
 			{
+				Worker() = default;
+				Worker(Worker&&) = default;
+
 				BlockingQueue<Op> mWorkQueue;
 
 				LocalEvaluator* mEval = nullptr;
