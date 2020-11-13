@@ -307,6 +307,8 @@ namespace coproto
 	ProtoV<void> send(Container& t)
 	{
 		ProtoV<void> proto;
+		auto tt = sizeof(Container);
+		auto ss = sizeof(RefSendProto<Container>);
 		proto.mBase.emplace<RefSendProto<Container>>(t);
 		return proto;
 	}

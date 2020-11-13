@@ -3,9 +3,55 @@
 #include <sstream>
 #include <vector>
 #include <array>
-
+#include <unordered_map>
+#include <mutex>
+#include <cassert>
 namespace coproto
 {
+
+
+
+	//inline std::atomic<int> gNewDel_ = 0;
+	std::unordered_map<void*, std::string> gNewMap;
+	std::mutex gMtx;
+	u64 mNewIdx = 0;
+	void regNew(void* ptr, std::string name)
+	{
+		std::lock_guard<std::mutex> lock(gMtx);
+		++gNewDel_;
+		
+		assert(gNewMap.find(ptr) == gNewMap.end());
+
+		gNewMap[ptr] = name + " _ " + std::to_string(mNewIdx++);
+
+		//std::cout << "new " << gNewMap[ptr] << std::endl;
+
+	}
+	void regDel(void* ptr)
+	{
+		std::lock_guard<std::mutex> lock(gMtx);
+		--gNewDel_;
+		auto iter = gNewMap.find(ptr);
+		assert(iter != gNewMap.end());
+		//std::cout << "del " << gNewMap[ptr] << std::endl;
+
+		gNewMap.erase(iter);
+	}
+
+	std::string regStr()
+	{
+		std::lock_guard<std::mutex> lock(gMtx);
+		std::stringstream ss;
+
+		ss << "count " << gNewDel_  << " / " << mNewIdx<< std::endl;
+		for (auto& p : gNewMap)
+		{
+			ss << hexPtr(p.first) << " " << p.second << std::endl;
+		}
+
+		return ss.str();
+	}
+
 	std::string hexPtr(void* p)
 	{
 		std::stringstream ss;

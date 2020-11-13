@@ -245,16 +245,30 @@ namespace coproto
 		t.add("coawait_nestedProtocol_Test           ", tests::coawait_nestedProtocol_Test);
 		t.add("coawait_nestedProtocol_Throw_Test     ", tests::coawait_nestedProtocol_Throw_Test);
 		t.add("coawait_nestedProtocol_ErrorCode_Test ", tests::coawait_nestedProtocol_ErrorCode_Test);
+
 		t.add("coawait_asyncProtocol_Test            ", tests::coawait_asyncProtocol_Test);
 		t.add("coawait_asyncProtocol_Throw_Test      ", tests::coawait_asyncProtocol_Throw_Test);
 		t.add("coawait_endOfRound_Test               ", tests::coawait_endOfRound_Test);
 		t.add("coawait_errorSocket_Test              ", tests::coawait_errorSocket_Test);
 
 		t.add("Native_StrSendRecv_Test               ", tests::Native_StrSendRecv_Test);
+		t.add("Native_returnValue_Test               ", tests::Native_returnValue_Test);
+		
 		t.add("Native_ZeroSendRecv_Test              ", tests::Native_ZeroSendRecv_Test);
-												     
-		t.add("Native_NestedSendRecv_Test            ", tests::Native_NestedSendRecv_Test); 
+		t.add("Native_ZeroSend_ErrorCode_Test        ", tests::Native_ZeroSend_ErrorCode_Test);
+		t.add("Native_BadRecvSize_Test               ", tests::Native_BadRecvSize_Test);
+		t.add("Native_BadRecvSize_ErrorCode_Test     ", tests::Native_BadRecvSize_ErrorCode_Test);
+		
+		t.add("Native_nestedProtocol_Test            ", tests::Native_nestedProtocol_Test);
+		t.add("Native_nestedProtocol_Throw_Test      ", tests::Native_nestedProtocol_Throw_Test);
+		t.add("Native_nestedProtocol_ErrorCode_Test  ", tests::Native_nestedProtocol_ErrorCode_Test);
 
+		t.add("Native_asyncProtocol_Test             ", tests::Native_asyncProtocol_Test);
+		t.add("Native_asyncProtocol_Throw_Test       ", tests::Native_asyncProtocol_Throw_Test);
+
+		t.add("Native_endOfRound_Test                ", tests::Native_endOfRound_Test);
+		t.add("Native_errorSocket_Test               ", tests::Native_errorSocket_Test);
+		
 		//t.add("v1::intSendRecvTest             ", v1::tests::intSendRecvTest);
 		//t.add("v1::arraySendRecvTest           ", v1::tests::arraySendRecvTest);
 		//t.add("v1::basicSendRecvTest           ", v1::tests::strSendRecvTest);

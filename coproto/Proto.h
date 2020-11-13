@@ -32,16 +32,18 @@ namespace coproto
 			std::unique_ptr<Scheduler> mSched;
 
 
-			error_code evaluate(Socket& sock)
+			error_code evaluate(Socket& sock, bool print)
 			{
 				if (mSched == nullptr)
 				{
-					mSched.reset(new Scheduler);
+					mSched = std::make_unique<Scheduler>();
 					mSched->scheduleReady(*get());
 					get()->mSlotIdx = 0;
 				}
 
 				mSched->mSock = &sock;
+				mSched->mPrint = print;
+
 				mSched->run();
 
 				if (get()->done())
@@ -50,16 +52,17 @@ namespace coproto
 					return code::suspend;
 			}
 
-			void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex)
+			void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex, bool print)
 			{
 				assert(mSched == nullptr);
-				mSched.reset(new Scheduler);
+				mSched = std::make_unique<Scheduler>();
 				mSched->scheduleReady(*get());
 				get()->mSlotIdx = 0;
 
 				mSched->mASock = &sock;
 				mSched->mExecutor = &ex;
 				mSched->mCont = std::move(cont);
+				mSched->mPrint = print;
 
 				mSched->dispatch([this]() {
 					mSched->run();
@@ -78,7 +81,12 @@ namespace coproto
 
 		internal::ProtoImpl mBase;
 
-		using value_type = T;
+
+		ProtoV() = default;
+		ProtoV(const ProtoV&) = delete;
+		ProtoV(ProtoV&&) = default;
+
+		using return_type = T;
 
 		typename internal::ResultPromise<T>::type wrap()
 		{
@@ -90,7 +98,11 @@ namespace coproto
 		ProtoV<Async<T>> async()
 		{
 			ProtoV<Async<T>> r;
-			r.mBase.setOwned(new internal::AsyncPromise<T>(std::move(mBase)));
+			auto ptr = new internal::AsyncPromise<T>(std::move(mBase));
+			regNew(ptr, "async");
+			r.mBase.setOwned(ptr);
+			//++gNewDel;
+			//std::cout << "new " << hexPtr(r.mBase.get()) << std::endl;
 			return r;
 		}
 
@@ -103,12 +115,12 @@ namespace coproto
 
 		error_code evaluate(Socket& sock)
 		{
-			return mBase.evaluate(sock);
+			return mBase.evaluate(sock, false);
 		}
 
 		void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex)
 		{
-			mBase.evaluate(sock, std::move(cont), ex);
+			mBase.evaluate(sock, std::move(cont), ex, false);
 
 		}
 
@@ -175,10 +187,14 @@ namespace coproto
 		template<>
 		struct ReturnStorage<void>
 		{
-			int& value() { int i; return i; }
-
 			void return_void()
 			{}
+
+
+			void* getValue()
+			{
+				return nullptr;
+			}
 		};
 
 		template<typename T>
@@ -197,10 +213,12 @@ namespace coproto
 				mVal = t;
 			}
 
-			T& value()
+			void* getValue()
 			{
-				return mVal.value();
+				return &mVal.value();
 			}
+
+
 		};
 
 		template<typename T>
@@ -213,7 +231,10 @@ namespace coproto
 			error_code mEc;
 			u64 mResumeIdx = 0;
 			u64 mProtoIdx = 0;
+#ifdef COPROTO_LOGGING
 			std::string mLabel;
+#endif
+
 
 			ProtoPromise() {
 				mProtoIdx = gProtoIdx++;
@@ -252,7 +273,9 @@ namespace coproto
 
 			std::suspend_never await_transform(const Name& name)
 			{
+#ifdef COPROTO_LOGGING
 				mLabel = (name.mName);
+#endif
 				return std::suspend_never{};
 			}
 
@@ -279,14 +302,9 @@ namespace coproto
 				return mEc;
 			};
 
-			void* getValue()
+			void* getValue() override
 			{
-				if constexpr (std::is_void_v<T>)
-					return nullptr;
-				else
-				{
-					return &ReturnStorage<T>::value();
-				}
+				return ReturnStorage<T>::getValue();
 			}
 
 			bool done() override {

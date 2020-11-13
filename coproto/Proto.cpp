@@ -159,13 +159,9 @@ namespace coproto
 					if (party)
 					{
 						co_await send(str);
-						//std::cout << " p1 sent" << std::endl;
-
 						co_await EndOfRound();
-						//std::cout << " p1 EOR" << std::endl;
 
 						str = co_await recv<std::string>();
-						//std::cout << " p1 recv" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 1))
 							throw std::runtime_error(COPROTO_LOCATION);
@@ -174,24 +170,15 @@ namespace coproto
 					else
 					{
 						co_await recv(str);
-						//std::cout << " p0 recv" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
 							throw std::runtime_error(COPROTO_LOCATION);
 
 						str.back() += 1;
 						co_await send(str);
-						//std::cout << " p0 send" << std::endl;
-
-
 						co_await EndOfRound();
-						//std::cout << " p0 EOR" << std::endl;
-
 					}
 				}
-
-
-				//std::cout << " p0 done" << std::endl;
 
 			};
 
@@ -409,7 +396,7 @@ namespace coproto
 		}
 
 
-		void coawait_zeroSend_ErrorCode_Test()
+		void coawait_zeroSendRecv_ErrorCode_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 
@@ -510,7 +497,7 @@ namespace coproto
 			}
 		}
 
-		void coawait_nestedSendRecv_Test()
+		void coawait_nestedProtocol_Test()
 		{
 			auto proto = [](bool party) -> Proto {
 				std::string str("hello from 0");
@@ -574,7 +561,7 @@ namespace coproto
 				co_await throwClient(i - 1);
 		}
 
-		void coawait_nestedProtocolThrow_Test()
+		void coawait_nestedProtocol_Throw_Test()
 		{
 
 			auto proto = [](bool party) -> Proto {
@@ -739,7 +726,7 @@ namespace coproto
 
 		}
 
-		void coawait_asyncThrowProtocol_Test()
+		void coawait_asyncProtocol_Throw_Test()
 		{
 			u64 n = 3;
 			auto proto = [n](bool party) -> Proto {

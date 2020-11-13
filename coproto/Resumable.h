@@ -3,6 +3,8 @@
 #include "coproto/error_code.h"
 #include "coproto/InlineVector.h"
 #include "coproto/InlinePoly.h"
+#include "coproto/TypeTraits.h"
+#include <vector>
 
 namespace coproto
 {
@@ -16,6 +18,7 @@ namespace coproto
 		Resumable(Resumable&&) = default;
 
 		internal::InlineVector<Resumable*, 4> mUpstream, mDwstream;
+		//std::vector<Resumable*> mUpstream, mDwstream;
 
 		u32 mSlotIdx = ~0;
 		u32& getSlot()

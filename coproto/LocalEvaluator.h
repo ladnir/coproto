@@ -5,6 +5,7 @@
 
 
 #include "coproto/Queue.h"
+#include <iostream>
 
 namespace coproto
 {
@@ -106,7 +107,7 @@ namespace coproto
 				BlockingQueue<Op> mWorkQueue;
 
 				LocalEvaluator* mEval = nullptr;
-				bool mHasThread=false;
+				bool mHasThread = false;
 				std::thread mThread;
 
 				std::array<Op, 2> mSend, mRecv;
@@ -191,7 +192,32 @@ namespace coproto
 				mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
 		}
 
-		error_code execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type = Type::interlace);
+		error_code execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type = Type::interlace, bool print = false);
 	};
 
+
+
+	inline std::ostream& operator<<(std::ostream& o, const LocalEvaluator::Type& t)
+	{
+
+		switch (t)
+		{
+
+		case LocalEvaluator::Type::interlace:
+			o << "interlace";
+			return o;
+		case LocalEvaluator::Type::blocking:
+			o << "blocking";
+			return o;
+		case LocalEvaluator::Type::async:
+			o << "async";
+			return o;
+		case LocalEvaluator::Type::asyncThread:
+			o << "asyncThread";
+			return o;
+		default:
+			break;
+		}
+		return o;
+	}
 }

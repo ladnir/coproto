@@ -102,13 +102,13 @@ namespace coproto
 		return {};
 	}
 
-	error_code LocalEvaluator::execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type)
+	error_code LocalEvaluator::execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type, bool print)
 	{
 #ifdef COPROTO_LOGGING
-		if (p0.mName.size() == 0)
-			p0.setName("main");
-		if (p1.mName.size() == 0)
-			p1.setName("main");
+		if (p0.mData->mName.size() == 0)
+			p0.mData->setName("main");
+		if (p1.mData->mName.size() == 0)
+			p1.mData->setName("main");
 #endif
 
 		mOpIdx = 0;
@@ -118,8 +118,10 @@ namespace coproto
 		//mScheds[1].scheduleReady(p1);
 		//mScheds[0].mRoundIdx = 0;
 		//mScheds[1].mRoundIdx = 0;
+		assert(p0.mData->done() == false);
+		assert(p1.mData->done() == false);
 
-		bool print = false;
+
 
 		if (type == Type::interlace)
 		{
@@ -136,7 +138,13 @@ namespace coproto
 
 				if (!p0->done())
 				{
-					p0.evaluate(mSocks[0]);
+
+					//p0.mSched.reset(new Scheduler);
+					//p0.mSched->scheduleReady(*p0.get());
+					//p0.mSched->mPrint = true;
+					//p0.get()->mSlotIdx = 0;
+
+					p0.evaluate(mSocks[0], print);
 
 					sendMsgs(0);
 					if (print)
@@ -144,7 +152,12 @@ namespace coproto
 				}
 				if (!p1->done())
 				{
-					p1.evaluate(mSocks[1]);
+					//p1.mSched.reset(new Scheduler);
+					//p1.mSched->scheduleReady(*p1.get());
+					//p1.mSched->mPrint = true;
+					//p1.get()->mSlotIdx = 0;
+
+					p1.evaluate(mSocks[1], print);
 
 					sendMsgs(1);
 					if (print)
@@ -161,10 +174,10 @@ namespace coproto
 			mBlkSocks[1].mOther = &mBlkSocks[0];
 
 			auto thrd = std::thread([&]() {
-				p0.evaluate(mBlkSocks[0]);
+				p0.evaluate(mBlkSocks[0], print);
 				});
 
-			p1.evaluate(mBlkSocks[1]);
+			p1.evaluate(mBlkSocks[1], print);
 
 			thrd.join();
 
@@ -189,8 +202,8 @@ namespace coproto
 					done = true;
 			};
 
-			p0.evaluate(mAsyncSock[0], cc, ex);
-			p1.evaluate(mAsyncSock[1], cc, ex);
+			p0.evaluate(mAsyncSock[0], cc, ex, print);
+			p1.evaluate(mAsyncSock[1], cc, ex, print);
 
 			ex.run();
 
@@ -218,8 +231,8 @@ namespace coproto
 					done[p] = true;
 			};
 
-			p0.evaluate(mAsyncSock[0], [&](error_code ec) { cc(ec, 0); }, ex);
-			p1.evaluate(mAsyncSock[1], [&](error_code ec) { cc(ec, 1); }, ex);
+			p0.evaluate(mAsyncSock[0], [&](error_code ec) { cc(ec, 0); }, ex, print);
+			p1.evaluate(mAsyncSock[1], [&](error_code ec) { cc(ec, 1); }, ex, print);
 
 			ex.run();
 			socketWorker.join();

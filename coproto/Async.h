@@ -162,7 +162,7 @@ namespace coproto
 #ifdef COPROTO_LOGGING
 				sched.logEdge(*this, *mBase.get(), true);
 #endif
-				mRet.mBase.reset(new Controller);
+				mRet.mBase = std::make_unique<Controller>();
 				auto ptr = (Controller*)mRet.mBase.get();
 				ptr->mBase = std::move(mBase);
 
@@ -179,7 +179,9 @@ namespace coproto
 				return mStatus == Status::Done;
 			};
 
-			void* getValue() override { return &mRet; };
+			void* getValue() override { 
+				return &mRet; 
+			};
 			void setError(error_code e, std::exception_ptr p)override {
 				assert(0);
 			}

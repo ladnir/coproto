@@ -5,27 +5,79 @@
 
 namespace coproto
 {
-
-	struct NativeProto : public Resumable
+	template<typename ReturnType>
+	struct NativeProtoV : public Resumable, public internal::ReturnStorage<ReturnType>
 	{
 		error_code mEc = {};
 		std::exception_ptr mExPtr = nullptr;
 		u64 mState = 0;
-
+		u64 mProtoIdx;
+		using return_type = ReturnType;
 
 		bool mDone = false;
-		bool mRoE = false;
+		//bool mRoE = false;
 		Scheduler* mSched = nullptr;
+
+		NativeProtoV() {
+			mProtoIdx = gProtoIdx++;
+#ifdef COPROTO_LOGGING
+			setName("NativeProto_" + std::to_string(mProtoIdx));
+#endif
+		}
+		NativeProtoV(const NativeProtoV&) = delete;
+		NativeProtoV(NativeProtoV&&) = default;
+
 
 
 		virtual error_code resume() = 0;
-		bool& resumeOnError() { return mRoE; }
+		//bool& resumeOnError() { return mRoE; }
 
 		internal::InlinePoly<Resumable, internal::inlineSize> mAsyncOp;
 
-		error_code initOp()
+		//error_code initOp()
+		//{
+		//	assert(mAsyncOp.get() && mAsyncOp->done() == false);
+
+		//	mSched->addDep(*this, *mAsyncOp.get());
+		//	auto ec = mSched->resume(mAsyncOp.get());
+
+		//	return ec;
+		//}
+
+		//template<typename Container>
+		//error_code send(Container& cont)
+		//{
+		//	assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
+		//	mAsyncOp.emplace<RefSendProto<Container>>(cont);
+
+		//	return initOp();
+		//}
+
+		//template<typename Container>
+		//error_code send(Container&& cont)
+		//{
+		//	assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
+		//	mAsyncOp.emplace<MvSendProto<Container>>(std::forward<Container>(cont));
+
+		//	return initOp();
+		//}
+
+
+		error_code await(const EndOfRound&)
 		{
-			assert(mAsyncOp.get() && mAsyncOp->done() == false);
+			if (mSched->mReady.size())
+			{
+				mSched->mReady.push_back(this);
+				return code::suspend;
+			}
+			return {};
+		}
+
+		template<typename T>
+		error_code await(ProtoV<T>&& proto)
+		{
+			assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
+			mAsyncOp = std::move(proto.mBase);
 
 			mSched->addDep(*this, *mAsyncOp.get());
 			auto ec = mSched->resume(mAsyncOp.get());
@@ -33,54 +85,41 @@ namespace coproto
 			return ec;
 		}
 
-		template<typename Container>
-		error_code send(Container& cont)
+
+		template<typename T>
+		error_code await(Async<T>&& proto)
 		{
 			assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
-			mAsyncOp.emplace<RefSendProto<Container>>(cont);
+			//mAsyncOp = std::move(proto.mBase.get()->mBase);
 
-			return initOp();
-		}
-
-		template<typename Container>
-		error_code send(Container&& cont)
-		{
-			assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
-			mAsyncOp.emplace<MvSendProto<Container>>(std::forward<Container>(cont));
-
-			return initOp();
-		}
-
-
-		template<typename Container>
-		error_code recv(Container& cont)
-		{
-			assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
-			mAsyncOp.emplace<RefRecvProto<Container>>(cont);
-
-			return initOp();
-		}
-
-
-		error_code await(Proto&& proto)
-		{
-			assert(mAsyncOp.get() == nullptr || mAsyncOp->done());
-			mAsyncOp = std::move(proto.mBase);
-
-			return initOp();
-		}
-
-		error_code endOfRound()
-		{
-			if (mSched->mReady.size())
-				return code::suspend;
-			else
+			if (proto.mBase.get()->mBase->done())
 				return {};
+			else
+				mSched->addDep(*this, *proto.mBase.get()->mBase.get());
+
+			return code::suspend;
 		}
 
-		error_code getAwaitResult()
+		template<typename T>
+		error_code await(Async<T>& proto)
 		{
-			return mEc;
+			//mAsyncOp = std::move(proto.mBase.get()->mBase);
+			if (proto.mBase.get()->mBase->done())
+				return proto.mBase.get()->mBase->getErrorCode();
+			else
+				mSched->addDep(*this, *proto.mBase.get()->mBase.get());
+
+			return code::suspend;
+		}
+
+		void* getAwaitReturn()
+		{
+			return mAsyncOp->getValue();
+		}
+
+		void* getValue() override
+		{
+			return internal::ReturnStorage<return_type>::getValue();
 		}
 
 		error_code resume_(Scheduler& sched) override
@@ -93,7 +132,7 @@ namespace coproto
 
 			try
 			{
-				if (!mEc || (mEc && mRoE))
+				if (!mEc)
 				{
 					auto ec = resume();
 					if (ec != code::suspend)
@@ -137,10 +176,12 @@ namespace coproto
 
 	};
 
+	using NativeProto = NativeProtoV<void>;
+
 	template<typename P, typename... Args>
-	Proto makeProto(Args&&... args)
+	ProtoV<typename P::return_type> makeProto(Args&&... args)
 	{
-		Proto p;
+		ProtoV<typename P::return_type> p;
 		p.mBase.emplace<P>(std::forward<Args>(args)...);
 		return p;
 	}
@@ -153,10 +194,21 @@ namespace coproto
 		void Native_ZeroSendRecv_Test();
 		void Native_ZeroSend_ErrorCode_Test();
 
+		void Native_returnValue_Test();
+
 		void Native_BadRecvSize_Test();
 		void Native_BadRecvSize_ErrorCode_Test();
 
-		void Native_NestedSendRecv_Test();
+
+		void Native_nestedProtocol_Test();
+		void Native_nestedProtocol_Throw_Test();
+		void Native_nestedProtocol_ErrorCode_Test();
+
+		void Native_asyncProtocol_Test();
+		void Native_asyncProtocol_Throw_Test();
+		void Native_endOfRound_Test();
+		void Native_errorSocket_Test();
+
 	}
 
 

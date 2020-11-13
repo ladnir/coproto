@@ -1,5 +1,6 @@
 #pragma once
 #include "coproto/Defines.h"
+#include <iostream>
 
 namespace coproto
 {
@@ -123,6 +124,8 @@ namespace coproto
 				// this object is too big, use the allocator. Local storage
 				// will be unused as denoted by (isSBO() == false).
 				mData = new U(std::forward<Args>(args)...);
+				regNew(mData, "InlinePoly");
+				//std::cout << "new " << hexPtr(mData) << std::endl;
 				isOwning() = true;
 			}
 
@@ -158,6 +161,9 @@ namespace coproto
 				else if (get() && isOwning())
 				{
 					// let the compiler call the destructor
+					//std::cout << "del " << hexPtr(get()) << std::endl;
+					//--gNewDel;
+					regDel(get());
 					delete get();
 				}
 

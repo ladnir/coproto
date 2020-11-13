@@ -1,4 +1,10 @@
 #pragma once
+
+
+#define _CRTDBG_MAP_ALLOC
+#include <stdlib.h>
+#include <crtdbg.h>
+
 #define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include <cstdint>
@@ -9,10 +15,19 @@
 #define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
 #define COPROTO_LOCATION __FILE__ ":" COPRO_STRINGIZE(__LINE__)
 
-//#define COPROTO_LOGGING
+#define COPROTO_LOGGING
+#include <atomic>
+
 
 namespace coproto
 {
+
+    inline std::atomic<int> gNewDel_ = 0;
+
+    void regNew(void* ptr, std::string name);
+    void regDel(void* ptr);
+    std::string regStr();
+
 
     typedef uint64_t u64;
     typedef int64_t i64;
@@ -35,7 +50,7 @@ namespace coproto
     {
         template<typename T>
         class ProtoPromise;
-        const int inlineSize = 100;
+        const int inlineSize = 256;
     }
 
 }

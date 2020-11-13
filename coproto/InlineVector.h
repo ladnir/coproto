@@ -1,5 +1,6 @@
 #pragma once
 #include "coproto/Defines.h"
+#include <cassert>
 
 namespace coproto
 {
@@ -23,6 +24,8 @@ namespace coproto
 			InlineVector()
 			{
 				mSpan = span<T>((T*)&mStorage, 0);
+				assert(!isHeap());
+
 			}
 			InlineVector(const InlineVector& c)
 			{
@@ -36,6 +39,8 @@ namespace coproto
 
 			InlineVector(InlineVector&& c)
 			{
+				mSpan = span<T>((T*)&mStorage, 0);
+
 				if (c.isInline())
 				{
 					grow(c.size());
@@ -50,9 +55,29 @@ namespace coproto
 				else
 				{
 					mSpan = c.mSpan;
+					setCapacity(c.capacity());
 				}
 
-				c.mSpan = span<T>((T*)&mStorage, 0);
+				c.mSpan = span<T>((T*)&c.mStorage, 0);
+			}
+
+			bool isHeap()
+			{
+				return mSpan.data() && isInline() == false;
+			}
+
+			~InlineVector()
+			{
+				if (isHeap())
+				{
+					regDel(data());
+					//std::cout << "del " << hexPtr(data()) << std::endl;
+					delete[] data();
+				}
+				else
+				{
+					assert(data() == (void*)&mStorage);
+				}
 			}
 
 			iterator begin() { return mSpan.begin(); }
@@ -90,6 +115,8 @@ namespace coproto
 				{
 
 					auto newData = (T*) new TT[newCap];
+					regNew(newData, "grow");
+					//std::cout << "new " << hexPtr(newData) << std::endl;
 
 					for (u64 i = 0; i < size(); ++i)
 					{
@@ -99,13 +126,21 @@ namespace coproto
 							mSpan[i].~T();
 					}
 
-					if (isInline() == false && size() > 0)
-						delete data();
+					if (isHeap())
+					{
+						//--gNewDel;
+						//std::cout << "del " << hexPtr(data()) << std::endl;
+						regDel(data());
+						delete[] data();
+
+					}
 
 					mSpan = span<T>(newData, size());
-
-					*(u64*)&mStorage = newCap;
+					assert(isHeap());
+					setCapacity(newCap);
 				}
+
+				assert(mSpan.data());
 			}
 
 			bool isInline()
@@ -117,7 +152,7 @@ namespace coproto
 			constexpr u64 inlineCapacity()
 			{
 				// todo fix alignemnt.
-				return inlineSize / sizeof(T);
+				return inlineSize;
 			}
 
 			u64 capacity()
@@ -128,6 +163,12 @@ namespace coproto
 				{
 					return *(u64*)&mStorage;
 				}
+			}
+
+			void setCapacity(u64 cap)
+			{
+				assert(isInline() == false);
+				*(u64*)&mStorage = cap;
 			}
 
 
@@ -147,13 +188,15 @@ namespace coproto
 
 			void push_back(const T& t)
 			{
-				grow(size() + 1);
+				if(size() == capacity())
+					grow(size() * 2);
 				mSpan = span<T>(data(), size() + 1);
 				new(&mSpan.back()) T(t);
 			}
 			void push_back(T&& t)
 			{
-				grow(size() + 1);
+				if (size() == capacity())
+					grow(size() * 2);
 				mSpan = span<T>(data(), size() + 1);
 				new(&mSpan.back()) T(std::move(t));
 			}
@@ -163,7 +206,8 @@ namespace coproto
 				std::is_constructible<T, Args...>::value
 			void emplace_back(Args&&... args)
 			{
-				grow(size() + 1);
+				if (size() == capacity())
+					grow(size() * 2);
 				mSpan = span<T>(data(), size() + 1);
 				new(&mSpan.back()) T(std::forward<Args>(args)...);
 			}
