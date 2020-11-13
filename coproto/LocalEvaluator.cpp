@@ -1,6 +1,6 @@
 #include "coproto/LocalEvaluator.h"
 #include "coproto/Buffers.h"
-
+#include <cstring>
 namespace coproto
 {
 

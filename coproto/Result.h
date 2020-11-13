@@ -318,7 +318,7 @@ namespace coproto
 			error_code getErrorCode() override;
 		};
 
-
+		template<>
 		inline void* WrapPromise<void>::getValue()
 		{
 			return &mRes;
@@ -341,7 +341,7 @@ namespace coproto
 		}
 
 
-
+		template<>
 		inline error_code  WrapPromise<void>::getErrorCode()
 		{
 			return mRes;

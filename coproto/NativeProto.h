@@ -11,7 +11,9 @@ namespace coproto
 		error_code mEc = {};
 		std::exception_ptr mExPtr = nullptr;
 		u64 mState = 0;
+#ifdef COPROTO_LOGGING
 		u64 mProtoIdx;
+#endif
 		using return_type = ReturnType;
 
 		bool mDone = false;
@@ -19,8 +21,8 @@ namespace coproto
 		Scheduler* mSched = nullptr;
 
 		NativeProtoV() {
-			mProtoIdx = gProtoIdx++;
 #ifdef COPROTO_LOGGING
+			mProtoIdx = gProtoIdx++; 
 			setName("NativeProto_" + std::to_string(mProtoIdx));
 #endif
 		}
@@ -182,7 +184,9 @@ namespace coproto
 	ProtoV<typename P::return_type> makeProto(Args&&... args)
 	{
 		ProtoV<typename P::return_type> p;
-		p.mBase.emplace<P>(std::forward<Args>(args)...);
+		internal::InlinePoly<Resumable, internal::inlineSize>& b = p.mBase;
+
+		b.emplace<P>(std::forward<Args>(args)...);
 		return p;
 	}
 

@@ -83,7 +83,7 @@ namespace coproto
 		}
 
 		template<typename ValueType>
-		enable_if_t<std::is_trivial_v<ValueType>,span<u8>>
+		enable_if_t<std::is_trivial<ValueType>::value,span<u8>>
 			asSpan(ValueType& container)
 		{
 			return span<u8>((u8*)&container, sizeof(ValueType));

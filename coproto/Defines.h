@@ -2,7 +2,7 @@
 
 #include "config.h"
 #include <cstdint>
-#include <string>
+//#include <string>
 
 #define COPRO_STRINGIZE_DETAIL(x) #x
 #define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
@@ -40,7 +40,7 @@ extern u64 mNewIdx;
     template<typename T>
     class ProtoV;
 
-    std::string hexPtr(void*);
+    //std::string hexPtr(void*);
 
     namespace internal
     {

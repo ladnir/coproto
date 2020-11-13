@@ -13,7 +13,11 @@ namespace coproto
 		class InlineVector
 		{
 		public:
-			static const int bufferSize = std::max<int>(sizeof(u64), inlineSize * sizeof(T));
+			static const int bufferSize =
+				sizeof(u64) > inlineSize * sizeof(T) ?
+				sizeof(u64):
+				inlineSize * sizeof(T);
+			//std::max<int>(sizeof(u64), inlineSize * sizeof(T));
 
 			using InlineStorage = typename std::aligned_storage<bufferSize, alignof(T)>::type;
 
@@ -21,16 +25,18 @@ namespace coproto
 			span<T> mSpan;
 
 			using iterator = typename span<T>::iterator;
+			using size_type = typename span<T>::size_type;
+			using value_type = typename span<T>::value_type;
 
 
 			InlineVector()
-				: mSpan((T*)&mStorage, 0ull)
+				: mSpan((T*)&mStorage, size_type(0ull))
 			{
 				assert(!isHeap());
 			}
 
 			InlineVector(const InlineVector& c)
-				: mSpan((T*)&mStorage, 0ull)
+				: mSpan((T*)&mStorage, size_type(0ull))
 			{
 				grow(c.size());
 				mSpan = span<T>(mSpan.data(), c.size());
@@ -41,7 +47,7 @@ namespace coproto
 			}
 
 			InlineVector(InlineVector&& c)
-				: mSpan((T*)&mStorage, 0ull)
+				: mSpan((T*)&mStorage, size_type(0ull))
 			{
 				if (c.isInline())
 				{
@@ -50,7 +56,7 @@ namespace coproto
 					for (u64 i = 0; i < c.size(); ++i)
 					{
 						new (&mSpan[i]) T(std::move(c.mSpan[i]));
-						CallDestructor<T>(c.mSpan[i]);
+						CallDestructor<T>_(c.mSpan[i]);
 						//if constexpr (std::is_trivially_destructible<T>::value == false)
 						//	c.mSpan[i].~T();
 					}
@@ -61,7 +67,7 @@ namespace coproto
 					setCapacity(c.capacity());
 				}
 
-				c.mSpan = span<T>((T*)&c.mStorage, 0ull);
+				c.mSpan = span<T>((T*)&c.mStorage, size_type(0ull));
 			}
 
 			bool isHeap()
@@ -102,8 +108,8 @@ namespace coproto
 					new (&mSpan[i]) T{};
 
 
-					for (u64 i = newSize; i < oldSize; ++i)
-						CallDestructor<T>(data()[i]);
+				for (u64 i = newSize; i < oldSize; ++i)
+					CallDestructor<T>_(data()[i]);
 			}
 
 			// prevent the constructor being called
@@ -183,14 +189,14 @@ namespace coproto
 			{
 
 				//if constexpr (std::is_trivially_destructible<T>::value == false)
-				CallDestructor<T>(mSpan.back());
+				CallDestructor<T>_(mSpan.back());
 
 				mSpan = span<T>(data(), size() - 1);
 			}
 
 			void push_back(const T& t)
 			{
-				if(size() == capacity())
+				if (size() == capacity())
 					grow(size() * 2);
 				mSpan = span<T>(data(), size() + 1);
 				new(&mSpan.back()) T(t);

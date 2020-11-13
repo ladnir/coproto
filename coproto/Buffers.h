@@ -308,8 +308,6 @@ namespace coproto
 	ProtoV<void> send(Container& t)
 	{
 		ProtoV<void> proto;
-		auto tt = sizeof(Container);
-		auto ss = sizeof(RefSendProto<Container>);
 		proto.mBase.emplace<RefSendProto<Container>>(t);
 		return proto;
 	}
@@ -345,7 +343,11 @@ namespace coproto
 	ProtoV<Container> recv()
 	{
 		ProtoV<Container> proto;
-		proto.mBase.emplace<MoveRecvProto<Container>>();
+		using Prom = MoveRecvProto<Container>;
+		internal::InlinePoly<Resumable, internal::inlineSize>& b = proto.mBase;
+
+
+		b.emplace<Prom>();
 		return proto;
 	}
 

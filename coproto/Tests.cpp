@@ -11,6 +11,7 @@
 #endif
 #include <iomanip>
 #include <chrono>
+#include <cmath>
 
 namespace coproto
 {
@@ -198,7 +199,7 @@ namespace coproto
 	{
 		std::vector<u64> idxs;
 		bool t = false;
-		for (u64 i = 1; i < argc; ++i)
+		for (u64 i = 1; i < u64(argc); ++i)
 		{
 			if (argv[i] == std::string("-u"))
 			{

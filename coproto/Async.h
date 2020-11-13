@@ -167,7 +167,7 @@ namespace coproto
 #ifdef COPROTO_LOGGING
 				sched.logEdge(*this, *mBase.get(), true);
 #endif
-				mRet.mBase = std::make_unique<Controller>();
+				mRet.mBase = make_unique<Controller>();
 				auto ptr = (Controller*)mRet.mBase.get();
 				ptr->mBase = std::move(mBase);
 

@@ -7,7 +7,7 @@ namespace coproto
 
 	template< class T >
 	struct remove_cvref {
-		using type = typename std::remove_cv<std::remove_reference_t<T>>::type;
+		using type = typename std::remove_cv<typename std::remove_reference<T>::type>::type;
 	};
 
 

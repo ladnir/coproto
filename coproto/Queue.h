@@ -2,10 +2,16 @@
 #include <mutex>
 #include <condition_variable>
 #include <queue>
+#include <memory>
 
 
 namespace coproto
 {
+	template<typename T, typename... Args>
+	std::unique_ptr<T> make_unique(Args... args)
+	{
+		return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+	}
 
 	template <typename T>
 	class BlockingQueue
@@ -22,20 +28,20 @@ namespace coproto
 	public:
 
 		BlockingQueue()
-			: mState(std::make_unique<State>())
+			: mState(make_unique<State>())
 		{}
 
 
 		BlockingQueue(BlockingQueue&& q)
 			: mState(std::move(q.mState))
 		{
-			q.mState = std::make_unique<State>();
+			q.mState = make_unique<State>();
 		}
 
 		BlockingQueue& operator=(BlockingQueue&& q)
 		{
 			mState = (std::move(q.mState));
-			q.mState = std::make_unique<State>();
+			q.mState = make_unique<State>();
 			return *this;
 		}
 

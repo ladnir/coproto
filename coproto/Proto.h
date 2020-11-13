@@ -23,7 +23,7 @@
 
 namespace coproto
 {
-	std::string hexPtr(void* p);
+	//std::string hexPtr(void* p);
 
 	namespace internal
 	{
@@ -35,7 +35,7 @@ namespace coproto
 			{
 				if (mSched == nullptr)
 				{
-					mSched = std::make_unique<Scheduler>();
+					mSched = make_unique<Scheduler>();
 					mSched->scheduleReady(*get());
 					get()->mSlotIdx = 0;
 				}
@@ -54,7 +54,7 @@ namespace coproto
 			void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex, bool print)
 			{
 				assert(mSched == nullptr);
-				mSched = std::make_unique<Scheduler>();
+				mSched = make_unique<Scheduler>();
 				mSched->scheduleReady(*get());
 				get()->mSlotIdx = 0;
 
@@ -85,11 +85,21 @@ namespace coproto
 		ProtoV(ProtoV&&) = default;
 
 		using return_type = T;
-
-		typename internal::WrapPromise<T>::type wrap()
+		using wrap_type = typename internal::WrapPromise<T>::type;
+		wrap_type wrap()
 		{
-			typename internal::WrapPromise<T>::type r;
-			r.mBase.emplace<internal::WrapPromise<T>>(std::move(mBase));
+			wrap_type r;
+
+			//using Interface = Resumable;
+			//using U = Prom;
+			//using Args = decltype(std::move(mBase));
+			//static_assert(is_poly_emplaceable<Interface, U, Args>::value, "");
+
+			using Prom = internal::WrapPromise<return_type>;
+			internal::InlinePoly<Resumable, internal::inlineSize>& b = r.mBase;
+
+			b.emplace<Prom>(std::move(mBase));
+
 			return r;
 		}
 

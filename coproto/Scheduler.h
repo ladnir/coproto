@@ -8,6 +8,7 @@
 
 #include "coproto/Queue.h"
 #include <unordered_map>
+#include <thread>
 
 namespace coproto
 {
@@ -21,7 +22,7 @@ namespace coproto
 		Continutation(Continutation&&) = default;
 
 		template<typename Fn, typename Enable_If = 
-			enable_if_t<std::is_constructible_v<Func, Fn&&>>>
+			enable_if_t<std::is_constructible<Func, Fn&&>::value>>
 		Continutation(Fn&& fn)
 			: mFn(std::forward<Fn>(fn))
 		{}
@@ -39,7 +40,10 @@ namespace coproto
 		}
 	};
 
-	extern std::atomic<u64> gProtoIdx;
+
+#ifdef COPROTO_LOGGING
+	extern u64 gProtoIdx;
+#endif
 
 	struct AsyncSocket
 	{
@@ -127,7 +131,7 @@ namespace coproto
 		bool done();
 
 		template<typename Fn>
-		inline enable_if_t<std::is_constructible_v<std::function<void()>, Fn>>
+		inline enable_if_t<std::is_constructible<std::function<void()>, Fn>::value>
 			 dispatch(Fn&& fn)
 		{
 			if (mExecutor)

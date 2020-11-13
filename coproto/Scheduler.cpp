@@ -5,8 +5,10 @@
 
 namespace coproto
 {
-	std::atomic<u64> gProtoIdx(0);
-
+	//std::atomic<u64> gProtoIdx(0);
+#ifdef COPROTO_LOGGING
+	u64  gProtoIdx(0);
+#endif
 
 	error_code Scheduler::resume(Resumable* proto)
 	{
@@ -14,7 +16,7 @@ namespace coproto
 		if (mStack.size())
 		{
 
-			if (proto->mSlotIdx == ~0)
+			if (proto->mSlotIdx == ~u32(0))
 				proto->mSlotIdx = mStack.back()->mSlotIdx;
 		}
 
@@ -64,7 +66,7 @@ namespace coproto
 
 			task = mReady.front();
 			mReady.pop_front();
-			auto ec = resume(task);
+			resume(task);
 		}
 
 		if (mPrint)
@@ -313,7 +315,7 @@ namespace coproto
 
 		}
 #endif
-		assert(slot != ~0);
+		assert(slot != ~u32(0));
 		mSendBuffers.emplace_back(std::move(op), slot, res);
 
 		if (mSock)

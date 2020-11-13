@@ -37,7 +37,7 @@ namespace coproto
 			{
 				// construct the
 				template<typename... Args, typename Enabled_If =
-					enable_if_t<std::is_constructible_v<U, Args...>>>				
+					enable_if_t<std::is_constructible<U, Args...>::value>>				
 				ModelController(Args&& ... args)
 					:mU(std::forward<Args>(args)...)
 				{}
