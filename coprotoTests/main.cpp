@@ -10,6 +10,6 @@ int main(int argc, char** argv)
 {
 	coproto::testCollection.run(argc, argv);
 	//_CrtDumpMemoryLeaks();
-	std::cout << coproto::regStr() << std::endl;
+	//std::cout << coproto::regStr() << std::endl;
 	return 0;
 }

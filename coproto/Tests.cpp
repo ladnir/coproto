@@ -1,4 +1,3 @@
-#define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include "coproto/Tests.h"
 #include "coproto/NativeProto.h"
@@ -102,11 +101,16 @@ namespace coproto
 		int w = int(std::ceil(std::log10(mTests.size())));
 		std::cout << std::setw(w) << idx << " - " << Color::Blue << mTests[idx].mName << ColorDefault << std::flush;
 
+#ifdef ALLOC_TEST
+		auto beginAlloc = mNewIdx;
+#endif
 		auto start = std::chrono::high_resolution_clock::now();
 		try
 		{
 			mTests[idx].mTest(); std::cout << Color::Green << "  Passed" << ColorDefault;
 			res = Result::passed;
+
+			
 		}
 		catch (const UnitTestSkipped& e)
 		{
@@ -122,7 +126,16 @@ namespace coproto
 
 
 		uint64_t time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-		std::cout << "   " << time << "ms" << std::endl;
+		std::cout << "   " << time << "ms ";
+		
+#ifdef ALLOC_TEST
+		auto endAlloc = mNewIdx;
+		std::cout << endAlloc - beginAlloc << " allocs";
+		if (gNewDel_)
+			std::cout << ", " << gNewDel_ << " leaks";
+#endif
+
+		std::cout << std::endl;
 
 		return res;
 	}

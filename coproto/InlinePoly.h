@@ -4,6 +4,10 @@
 
 namespace coproto
 {
+
+
+
+
 	namespace internal
 	{
 
@@ -124,7 +128,7 @@ namespace coproto
 				// this object is too big, use the allocator. Local storage
 				// will be unused as denoted by (isSBO() == false).
 				mData = new U(std::forward<Args>(args)...);
-				regNew(mData, "InlinePoly");
+				CP_REG_NEW(mData, "InlinePoly");
 				//std::cout << "new " << hexPtr(mData) << std::endl;
 				isOwning() = true;
 			}
@@ -163,7 +167,7 @@ namespace coproto
 					// let the compiler call the destructor
 					//std::cout << "del " << hexPtr(get()) << std::endl;
 					//--gNewDel;
-					regDel(get());
+					CP_REG_DEL(get());
 					delete get();
 				}
 

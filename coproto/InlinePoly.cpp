@@ -10,12 +10,12 @@ namespace coproto
 {
 
 
-
+#ifdef ALLOC_TEST
 	//inline std::atomic<int> gNewDel_ = 0;
 	std::unordered_map<void*, std::string> gNewMap;
 	std::mutex gMtx;
 	u64 mNewIdx = 0;
-	void regNew(void* ptr, std::string name)
+	void regNew_(void* ptr, std::string name)
 	{
 		std::lock_guard<std::mutex> lock(gMtx);
 		++gNewDel_;
@@ -27,7 +27,7 @@ namespace coproto
 		//std::cout << "new " << gNewMap[ptr] << std::endl;
 
 	}
-	void regDel(void* ptr)
+	void regDel_(void* ptr)
 	{
 		std::lock_guard<std::mutex> lock(gMtx);
 		--gNewDel_;
@@ -51,6 +51,7 @@ namespace coproto
 
 		return ss.str();
 	}
+#endif
 
 	std::string hexPtr(void* p)
 	{

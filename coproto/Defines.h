@@ -1,12 +1,5 @@
 #pragma once
 
-
-#define _CRTDBG_MAP_ALLOC
-#include <stdlib.h>
-#include <crtdbg.h>
-
-#define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
-
 #include <cstdint>
 #include <span>
 #include <string>
@@ -24,10 +17,18 @@ namespace coproto
 
     inline std::atomic<int> gNewDel_ = 0;
 
-    void regNew(void* ptr, std::string name);
-    void regDel(void* ptr);
-    std::string regStr();
 
+#ifdef ALLOC_TEST
+    void regNew_(void* ptr, std::string name);
+    void regDel_(void* ptr);
+    std::string regStr();
+#define CP_REG_NEW(p, n) regNew_(p,n)
+#define CP_REG_DEL(p) regDel_(p)
+extern u64 mNewIdx;
+#else
+#define CP_REG_NEW(p, n) 
+#define CP_REG_DEL(p)
+#endif
 
     typedef uint64_t u64;
     typedef int64_t i64;

@@ -17,7 +17,7 @@ namespace coproto
 		Resumable(const Resumable&) = default;
 		Resumable(Resumable&&) = default;
 
-		internal::InlineVector<Resumable*, 4> mUpstream, mDwstream;
+		internal::InlineVector<Resumable*, 2> mUpstream, mDwstream;
 		//std::vector<Resumable*> mUpstream, mDwstream;
 
 		u32 mSlotIdx = ~0;

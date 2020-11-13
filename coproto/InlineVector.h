@@ -70,7 +70,7 @@ namespace coproto
 			{
 				if (isHeap())
 				{
-					regDel(data());
+					CP_REG_DEL(data());
 					//std::cout << "del " << hexPtr(data()) << std::endl;
 					delete[] data();
 				}
@@ -115,7 +115,7 @@ namespace coproto
 				{
 
 					auto newData = (T*) new TT[newCap];
-					regNew(newData, "grow");
+					CP_REG_NEW(newData, "grow");
 					//std::cout << "new " << hexPtr(newData) << std::endl;
 
 					for (u64 i = 0; i < size(); ++i)
@@ -130,7 +130,7 @@ namespace coproto
 					{
 						//--gNewDel;
 						//std::cout << "del " << hexPtr(data()) << std::endl;
-						regDel(data());
+						CP_REG_DEL(data());
 						delete[] data();
 
 					}

@@ -1,4 +1,3 @@
-#define _SILENCE_CXX20_IS_POD_DEPRECATION_WARNING
 
 #include "coproto/TypeTraits.h"
 #include <vector>
