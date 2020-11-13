@@ -1,4 +1,5 @@
 #pragma once
+#include "coproto/config.h"
 
 #ifdef COPROTO_CPP20
 #include <coroutine>

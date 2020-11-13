@@ -1,4 +1,3 @@
-
 #include "coproto/AwaitProto.h"
 #include <algorithm>
 #include <numeric>

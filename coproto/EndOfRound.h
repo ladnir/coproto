@@ -1,7 +1,11 @@
 #pragma once
+#include "coproto/config.h"
+#ifdef COPROTO_CPP20
+#include <coroutine>
+#endif
+
 #include "coproto/Defines.h"
 #include "coproto/Scheduler.h"
-
 
 namespace coproto
 {
