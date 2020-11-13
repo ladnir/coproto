@@ -19,9 +19,9 @@ namespace coproto
 		Continutation(const Continutation&) = delete;
 		Continutation(Continutation&&) = default;
 
-		template<typename Fn>
-		requires std::is_constructible_v<Func, Fn&&>
-			Continutation(Fn&& fn)
+		template<typename Fn, typename Enable_If = 
+			enable_if_t<std::is_constructible_v<Func, Fn&&>>>
+		Continutation(Fn&& fn)
 			: mFn(std::forward<Fn>(fn))
 		{}
 
@@ -126,8 +126,8 @@ namespace coproto
 		bool done();
 
 		template<typename Fn>
-		requires std::is_constructible_v<std::function<void()>, Fn>
-			inline void dispatch(Fn&& fn)
+		inline enable_if_t<std::is_constructible_v<std::function<void()>, Fn>>
+			 dispatch(Fn&& fn)
 		{
 			if (mExecutor)
 				mExecutor->dispatch(std::forward<Fn>(fn));

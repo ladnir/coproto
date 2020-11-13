@@ -75,7 +75,7 @@ namespace coproto
 				};
 				u64 mIdx = ~0ull;
 				Type mType;
-				std::span<u8> mData;
+				span<u8> mData;
 				Continutation mCont;
 
 				Op() = default;

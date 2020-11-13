@@ -57,8 +57,8 @@ namespace coproto
 	{
 
 		template<typename Container>
-		requires is_resizable_trivial_container_v<Container>
-			void tryResize(u64 size, Container& container)
+		enable_if_t<is_resizable_trivial_container<Container>::value>
+			tryResize(u64 size, Container& container)
 		{
 			try {
 				if ((size % sizeof(typename Container::value_type)) == 0)
@@ -70,21 +70,21 @@ namespace coproto
 		}
 
 		template<typename Container>
-		requires (!is_resizable_trivial_container_v<Container>)
-			void tryResize(u64 size, Container& container)
+		enable_if_t<!is_resizable_trivial_container<Container>::value>
+			tryResize(u64 size, Container& container)
 		{
 		}
 
 		template<typename Container>
-		requires is_trivial_container_v<Container>
-			span<u8> asSpan(Container& container)
+		enable_if_t<is_trivial_container<Container>::value, span<u8>>
+			asSpan(Container& container)
 		{
 			return span<u8>((u8*)container.data(), container.size() * sizeof(typename Container::value_type));
 		}
 
 		template<typename ValueType>
-		requires std::is_trivial_v<ValueType>
-			span<u8> asSpan(ValueType& container)
+		enable_if_t<std::is_trivial_v<ValueType>,span<u8>>
+			asSpan(ValueType& container)
 		{
 			return span<u8>((u8*)&container, sizeof(ValueType));
 		}

@@ -1,33 +1,31 @@
 #pragma once
 
+#include "config.h"
 #include <cstdint>
-#include <span>
 #include <string>
+#include "span.h"
 
 #define COPRO_STRINGIZE_DETAIL(x) #x
 #define COPRO_STRINGIZE(x) COPRO_STRINGIZE_DETAIL(x)
 #define COPROTO_LOCATION __FILE__ ":" COPRO_STRINGIZE(__LINE__)
 
-#define COPROTO_LOGGING
-#include <atomic>
 
 
 namespace coproto
 {
 
-    inline std::atomic<int> gNewDel_ = 0;
 
 
 #ifdef ALLOC_TEST
     void regNew_(void* ptr, std::string name);
     void regDel_(void* ptr);
     std::string regStr();
-#define CP_REG_NEW(p, n) regNew_(p,n)
-#define CP_REG_DEL(p) regDel_(p)
+#define COPROTO_REG_NEW(p, n) regNew_(p,n)
+#define COPROTO_REG_DEL(p) regDel_(p)
 extern u64 mNewIdx;
 #else
-#define CP_REG_NEW(p, n) 
-#define CP_REG_DEL(p)
+#define COPROTO_REG_NEW(p, n) 
+#define COPROTO_REG_DEL(p)
 #endif
 
     typedef uint64_t u64;
@@ -39,7 +37,7 @@ extern u64 mNewIdx;
     typedef uint8_t u8;
     typedef int8_t i8;
 
-    template<typename T> using span = std::span<T>;
+    template<typename T> using span = nonstd::span<T>;
 
 
     template<typename T>

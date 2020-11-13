@@ -1,7 +1,7 @@
 #pragma once
 #include "coproto/Defines.h"
 #include <iostream>
-
+#include "coproto/TypeTraits.h"
 namespace coproto
 {
 
@@ -36,8 +36,8 @@ namespace coproto
 			struct ModelController : Controller
 			{
 				// construct the
-				template<typename... Args>
-				requires std::is_constructible_v<U, Args...>
+				template<typename... Args, typename Enabled_If =
+					enable_if_t<std::is_constructible_v<U, Args...>>>				
 				ModelController(Args&& ... args)
 					:mU(std::forward<Args>(args)...)
 				{}
@@ -101,11 +101,15 @@ namespace coproto
 				return *(bool*)&getController();
 			}
 
+
+			template<typename U, typename... Args>
+			using is_emplaceable = is_poly_emplaceable<Interface, U, Args...>;
+
 			template<typename U, typename... Args >
-			requires (sizeof(ModelController<U>) <= sizeof(Storage)) &&
-				std::is_base_of<Interface, U>::value&&
-				std::is_constructible<U, Args...>::value
-			void emplace(Args&& ... args)
+			enable_if_t<
+				(sizeof(ModelController<U>) <= sizeof(Storage)) &&
+				is_emplaceable<U, Args...>::value>
+				emplace(Args&& ... args)
 			{
 				destruct();
 
@@ -117,18 +121,17 @@ namespace coproto
 			}
 
 			template<typename U, typename... Args >
-			requires
-				(sizeof(ModelController<U>) > sizeof(Storage)) &&
-				std::is_base_of<Interface, U>::value&&
-				std::is_constructible<U, Args...>::value
-			void emplace(Args&& ... args)
+			enable_if_t<
+					(sizeof(ModelController<U>) > sizeof(Storage)) &&	
+					is_emplaceable<U, Args...>::value>
+				emplace(Args&& ... args)
 			{
 				destruct();
 
 				// this object is too big, use the allocator. Local storage
 				// will be unused as denoted by (isSBO() == false).
 				mData = new U(std::forward<Args>(args)...);
-				CP_REG_NEW(mData, "InlinePoly");
+				COPROTO_REG_NEW(mData, "InlinePoly");
 				//std::cout << "new " << hexPtr(mData) << std::endl;
 				isOwning() = true;
 			}
@@ -167,7 +170,7 @@ namespace coproto
 					// let the compiler call the destructor
 					//std::cout << "del " << hexPtr(get()) << std::endl;
 					//--gNewDel;
-					CP_REG_DEL(get());
+					COPROTO_REG_DEL(get());
 					delete get();
 				}
 

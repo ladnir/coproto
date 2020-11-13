@@ -99,7 +99,7 @@ namespace coproto
 		{
 			ProtoV<Async<T>> r;
 			auto ptr = new internal::AsyncPromise<T>(std::move(mBase));
-			CP_REG_NEW(ptr, "async");
+			COPROTO_REG_NEW(ptr, "async");
 			r.mBase.setOwned(ptr);
 			//++gNewDel;
 			//std::cout << "new " << hexPtr(r.mBase.get()) << std::endl;

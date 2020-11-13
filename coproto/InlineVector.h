@@ -1,6 +1,7 @@
 #pragma once
 #include "coproto/Defines.h"
 #include <cassert>
+#include "coproto/TypeTraits.h"
 
 namespace coproto
 {
@@ -22,12 +23,12 @@ namespace coproto
 
 
 			InlineVector()
+				: mSpan((T*)&mStorage, 0ull)
 			{
-				mSpan = span<T>((T*)&mStorage, 0);
 				assert(!isHeap());
-
 			}
 			InlineVector(const InlineVector& c)
+				: mSpan((T*)&mStorage, 0ull)
 			{
 				grow(c.size());
 				mSpan = span<T>(mSpan.data(), c.size());
@@ -38,9 +39,8 @@ namespace coproto
 			}
 
 			InlineVector(InlineVector&& c)
+				: mSpan((T*)&mStorage, 0ull)
 			{
-				mSpan = span<T>((T*)&mStorage, 0);
-
 				if (c.isInline())
 				{
 					grow(c.size());
@@ -58,7 +58,7 @@ namespace coproto
 					setCapacity(c.capacity());
 				}
 
-				c.mSpan = span<T>((T*)&c.mStorage, 0);
+				c.mSpan = span<T>((T*)&c.mStorage, 0ull);
 			}
 
 			bool isHeap()
@@ -70,7 +70,7 @@ namespace coproto
 			{
 				if (isHeap())
 				{
-					CP_REG_DEL(data());
+					COPROTO_REG_DEL(data());
 					//std::cout << "del " << hexPtr(data()) << std::endl;
 					delete[] data();
 				}
@@ -115,7 +115,7 @@ namespace coproto
 				{
 
 					auto newData = (T*) new TT[newCap];
-					CP_REG_NEW(newData, "grow");
+					COPROTO_REG_NEW(newData, "grow");
 					//std::cout << "new " << hexPtr(newData) << std::endl;
 
 					for (u64 i = 0; i < size(); ++i)
@@ -130,7 +130,7 @@ namespace coproto
 					{
 						//--gNewDel;
 						//std::cout << "del " << hexPtr(data()) << std::endl;
-						CP_REG_DEL(data());
+						COPROTO_REG_DEL(data());
 						delete[] data();
 
 					}
@@ -202,9 +202,8 @@ namespace coproto
 			}
 
 			template<typename... Args>
-			requires
-				std::is_constructible<T, Args...>::value
-			void emplace_back(Args&&... args)
+			enable_if_t<std::is_constructible<T, Args...>::value>
+				emplace_back(Args&&... args)
 			{
 				if (size() == capacity())
 					grow(size() * 2);
