@@ -197,20 +197,20 @@ namespace coproto
 
 		void operator=(OkMvTag<value_type>&& v)
 		{
-			var() = { in_place_index<0>, std::move(v.mV) };
+			var() = variant<value_type, error_type>{ nonstd::in_place_index<0>, std::move(v.mV) };
 		}
 		void operator=(OkTag<value_type>&& v)
 		{
-			var() = { in_place_index<0>, v.mV };
+			var() = variant<value_type, error_type>{ nonstd::in_place_index<0>, v.mV };
 		}
 
 		void operator=(ErrorMvTag<error_type>&& v)
 		{
-			var() = { in_place_index<1>, std::move(v.mE) };
+			var() = variant<value_type, error_type>{ nonstd::in_place_index<1>, std::move(v.mE) };
 		}
 		void operator=(ErrorTag<error_type>&& v)
 		{
-			var() = { in_place_index<1>, v.mE };
+			var() = variant<value_type, error_type>{ nonstd::in_place_index<1>, v.mE };
 		}
 	};
 

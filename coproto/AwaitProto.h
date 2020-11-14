@@ -68,15 +68,15 @@ namespace coproto
 			std::exception_ptr mExPtr;
 			error_code mEc;
 			u64 mResumeIdx = 0;
-			u64 mProtoIdx = 0;
 #ifdef COPROTO_LOGGING
+			u64 mProtoIdx = 0;
 			std::string mLabel;
 #endif
 
 
 			ProtoPromise() {
-				mProtoIdx = gProtoIdx++;
 #ifdef COPROTO_LOGGING
+				mProtoIdx = gProtoIdx++;
 				setName("Proto_" + std::to_string(mProtoIdx));
 #endif
 			}

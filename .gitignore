@@ -5,3 +5,12 @@
 x64/
 out/
 *.args.json
+
+Makefile
+CMakeFiles/
+*/CMakeFiles/
+
+CMakeCache.txt
+cmake_install.cmake
+*/cmake_install.cmake
+*.a

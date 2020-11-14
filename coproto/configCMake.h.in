@@ -1,0 +1,8 @@
+#pragma once
+
+
+// compile the library with c++20 support
+#cmakedefine COPROTO_CPP20 @COPROTO_CPP20@ 
+
+// compile the library logging support
+#cmakedefine COPROTO_LOGGING @COPROTO_LOGGING@ 

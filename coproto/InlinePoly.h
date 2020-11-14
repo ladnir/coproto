@@ -27,7 +27,7 @@ namespace coproto
 				virtual void moveTo(InlinePoly<Interface, StorageSize>& dest) = 0;
 
 				// return size actual size of the underlying object
-				virtual u64 sizeOf() const = 0;
+				//virtual u64 sizeOf() const = 0;
 			};
 
 			// This type will contain a vtable which allows
@@ -42,15 +42,9 @@ namespace coproto
 					:mU(std::forward<Args>(args)...)
 				{}
 
-				void moveTo(InlinePoly<Interface, StorageSize>& dest) override
+				void moveTo(InlinePoly<Interface, StorageSize>& dest) 
 				{
-					//assert(dest.get() == nullptr);
 					dest.emplace<U>(std::move(mU));
-				}
-
-				u64 sizeOf() const override
-				{
-					return sizeof(U);
 				}
 
 				U mU;
