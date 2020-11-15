@@ -10,352 +10,371 @@
 
 namespace coproto
 {
-	std::string hexPtr(void* p);
+    //std::string hexPtr(void* p);
 
 
 
-	struct SendProto : public Resumable
-	{
+    template<typename Container>
+    enable_if_t<has_size_member_func<Container>::value, u64>
+        size(Container& cont)
+    {
+        return cont.size();
+    }
 
-		virtual SendBuffer getBuffer() = 0;
-	};
 
-	template<typename Container>
-	class MoveRecvProto : public Resumable, public RecvBuffer
-	{
-	public:
-		Container mContainer;
-		error_code mEc = code::suspend;
+    template<typename Container>
+    enable_if_t<
+        !has_size_member_func<Container>::value &&
+        std::is_trivial<Container>::value, u64>
+        size(Container& cont)
+    {
+        return sizeof(Container);
+    }
 
-		enum class Status
-		{
-			Uninit,
-			Inprogress,
-			Done
-		};
-		Status mStatus = Status::Uninit;
 
-		MoveRecvProto()
-		{
+
+    struct SendProto : public Resumable
+    {
+
+        virtual SendBuffer getBuffer() = 0;
+    };
+
+    template<typename Container>
+    class MoveRecvProto : public Resumable, public RecvBuffer
+    {
+    public:
+        Container mContainer;
+        error_code mEc = code::suspend;
+
+        enum class Status
+        {
+            Uninit,
+            Inprogress,
+            Done
+        };
+        Status mStatus = Status::Uninit;
+
+        MoveRecvProto()
+        {
 #ifdef COPROTO_LOGGING
-			setName("recv_" + std::to_string(gProtoIdx++));
+            setName("recv_" + std::to_string(gProtoIdx++));
 #endif
-		}
+        }
 
-		span<u8> asSpan(u64 size) override
-		{
-			internal::tryResize(size, mContainer);
+        span<u8> asSpan(u64 size) override
+        {
+            internal::tryResize(size, mContainer);
 
-			return internal::asSpan(mContainer);
-		}
-		error_code resume_(Scheduler& sched) override {
+            return internal::asSpan(mContainer);
+        }
+        error_code resume_(Scheduler& sched) override {
 
-			if (mStatus == Status::Uninit)
-			{
-				mStatus = Status::Inprogress;
-				sched.recv(this, getSlot(), this);
-			}
-			else if (mStatus == Status::Inprogress)
-			{
-				mStatus = Status::Done;
-				if (mEc == code::suspend)
-					mEc = {};
-				sched.fulfillDep(*this, mEc, nullptr);
-			}
+            if (mStatus == Status::Uninit)
+            {
+                mStatus = Status::Inprogress;
+                sched.recv(this, getSlot(), this);
+            }
+            else if (mStatus == Status::Inprogress)
+            {
+                mStatus = Status::Done;
+                if (mEc == code::suspend)
+                    mEc = {};
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
 
-			if (done())
-			{
-				return mEc;
-			}
+            if (done())
+            {
+                return mEc;
+            }
 
-			return code::suspend;
-		}
+            return code::suspend;
+        }
 
-		bool done() override {
-			return mStatus == Status::Done;
-		}
+        bool done() override {
+            return mStatus == Status::Done;
+        }
 
-		void setError(error_code ec, std::exception_ptr p) override {
-			assert(ec != code::suspend);
-			assert(p == nullptr && "exception_ptr not supported (MoveRecvProto)");
-			mEc = ec;
-		}
-		std::exception_ptr getExpPtr() override {
-			return nullptr;
-		}
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(ec != code::suspend);
+            assert(p == nullptr && "exception_ptr not supported (MoveRecvProto)");
+            mEc = ec;
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
 
-		error_code getErrorCode() override {
-			return mEc;
-		}
-		void* getValue() override { return &mContainer; };
+        error_code getErrorCode() override {
+            return mEc;
+        }
+        void* getValue() override { return &mContainer; };
 
-	};
-
-
-	template<typename Container, bool allowResize = true>
-	class RefRecvProto : public Resumable, public RecvBuffer
-	{
-	public:
-		Container& mContainer;
-		error_code mEc = code::suspend;
-		enum class Status
-		{
-			Uninit,
-			Inprogress,
-			Done
-		};
-		Status mStatus = Status::Uninit;
+    };
 
 
-		RefRecvProto(Container& t)
-			:mContainer(t)
-		{
+    template<typename Container, bool allowResize = true>
+    class RefRecvProto : public Resumable, public RecvBuffer
+    {
+    public:
+        Container& mContainer;
+        error_code mEc = code::suspend;
+        enum class Status
+        {
+            Uninit,
+            Inprogress,
+            Done
+        };
+        Status mStatus = Status::Uninit;
+
+
+        RefRecvProto(Container& t)
+            :mContainer(t)
+        {
 #ifdef COPROTO_LOGGING
-			setName("recv_" + std::to_string(gProtoIdx++));
+            setName("recv_" + std::to_string(gProtoIdx++));
 #endif
-		}
+        }
 
-		span<u8> asSpan(u64 size) override
-		{
-			if (allowResize)
-				internal::tryResize(size, mContainer);
+        span<u8> asSpan(u64 size) override
+        {
+            if (allowResize)
+                internal::tryResize(size, mContainer);
 
-			return internal::asSpan(mContainer);
-		}
+            return internal::asSpan(mContainer);
+        }
 
-		error_code resume_(Scheduler& sched) override {
-
-
-			if (mStatus == Status::Uninit)
-			{
-				mStatus = Status::Inprogress;
-				sched.recv(this, getSlot(), this);
-			}
-			else if (mStatus == Status::Inprogress)
-			{
-				mStatus = Status::Done;
-				if (mEc == code::suspend)
-					mEc = {};
-				sched.fulfillDep(*this, mEc, nullptr);
-			}
-
-			if (done())
-			{
-				return mEc;
-			}
-
-			return code::suspend;
-		}
-		void setError(error_code ec, std::exception_ptr p) override {
-			assert(ec != code::suspend);
-			assert(p == nullptr && "exception_ptr not supported (RefRecvProto)");
-			mEc = ec;
-		}
-		std::exception_ptr getExpPtr() override {
-			return nullptr;
-		}
+        error_code resume_(Scheduler& sched) override {
 
 
-		error_code getErrorCode() override {
-			return mEc;
-		}
+            if (mStatus == Status::Uninit)
+            {
+                mStatus = Status::Inprogress;
+                sched.recv(this, getSlot(), this);
+            }
+            else if (mStatus == Status::Inprogress)
+            {
+                mStatus = Status::Done;
+                if (mEc == code::suspend)
+                    mEc = {};
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
 
-		bool done() override {
-			return mStatus == Status::Done;
-		}
+            if (done())
+            {
+                return mEc;
+            }
 
-	};
+            return code::suspend;
+        }
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(ec != code::suspend);
+            assert(p == nullptr && "exception_ptr not supported (RefRecvProto)");
+            mEc = ec;
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
 
-	template<typename Container>
-	class RefSendProto : public SendProto
-	{
-	public:
-		Container& mContainer;
-		error_code mEc = code::suspend;
 
-		enum class Status
-		{
-			Uninit,
-			Inprogress,
-			Done,
-		};
-		Status mStatus = Status::Uninit;
+        error_code getErrorCode() override {
+            return mEc;
+        }
 
-		RefSendProto(Container& t)
-			:mContainer(t)
-		{
+        bool done() override {
+            return mStatus == Status::Done;
+        }
+
+    };
+
+    template<typename Container>
+    class RefSendProto : public SendProto
+    {
+    public:
+        Container& mContainer;
+        error_code mEc = code::suspend;
+
+        enum class Status
+        {
+            Uninit,
+            Inprogress,
+            Done,
+        };
+        Status mStatus = Status::Uninit;
+
+        RefSendProto(Container& t)
+            :mContainer(t)
+        {
 #ifdef COPROTO_LOGGING
-			setName("send_" + std::to_string(gProtoIdx++));
+            setName("send_" + std::to_string(gProtoIdx++));
 #endif
-		}
+        }
 
-		SendBuffer getBuffer()
-		{
-			SendBuffer ret;
-			ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
-			return ret;
-		}
+        SendBuffer getBuffer()
+        {
+            SendBuffer ret;
+            ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
+            return ret;
+        }
 
-		error_code resume_(Scheduler& sched) override
-		{
-			if (mStatus == Status::Uninit)
-			{
-				if (mContainer.size() == 0)
-				{
-					mEc = code::sendLengthZeroMsg;
-					mStatus = Status::Done;
-					sched.fulfillDep(*this, mEc, nullptr);
-				}
-				else
-				{
-					mStatus = Status::Inprogress;
-					sched.send_(getBuffer(), getSlot(), this);
-				}
-			}
-			else if (mStatus == Status::Inprogress)
-			{
-				mStatus = Status::Done;
-				if (mEc == code::suspend)
-					mEc = {};
-				sched.fulfillDep(*this, mEc, nullptr);
-			}
+        error_code resume_(Scheduler& sched) override
+        {
+            if (mStatus == Status::Uninit)
+            {
+                if (::coproto::size(mContainer) == 0)
+                {
+                    mEc = code::sendLengthZeroMsg;
+                    mStatus = Status::Done;
+                    sched.fulfillDep(*this, mEc, nullptr);
+                }
+                else
+                {
+                    mStatus = Status::Inprogress;
+                    sched.send_(getBuffer(), getSlot(), this);
+                }
+            }
+            else if (mStatus == Status::Inprogress)
+            {
+                mStatus = Status::Done;
+                if (mEc == code::suspend)
+                    mEc = {};
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
 
-			if (done())
-			{
-				return mEc;
-			}
+            if (done())
+            {
+                return mEc;
+            }
 
-			return code::suspend;
-		}
-
-
-		void setError(error_code ec, std::exception_ptr p) override {
-			assert(ec != code::suspend);
-			assert(p == nullptr);
-			mEc = ec;
-		}
-		std::exception_ptr getExpPtr() override {
-			return nullptr;
-		}
-
-		error_code getErrorCode() override {
-			return mEc;
-		}
-
-		bool done() override {
-			return mStatus == Status::Done;
-		}
-	};
+            return code::suspend;
+        }
 
 
-	template<typename Container>
-	class MvSendProto : public SendProto
-	{
-	public:
-		Container mContainer;
-		error_code mEc = code::suspend;
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(ec != code::suspend);
+            assert(p == nullptr);
+            mEc = ec;
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
 
-		MvSendProto(Container&& t)
-			:mContainer(std::move(t))
-		{
+        error_code getErrorCode() override {
+            return mEc;
+        }
+
+        bool done() override {
+            return mStatus == Status::Done;
+        }
+    };
+
+
+    template<typename Container>
+    class MvSendProto : public SendProto
+    {
+    public:
+        Container mContainer;
+        error_code mEc = code::suspend;
+
+        MvSendProto(Container&& t)
+            :mContainer(std::move(t))
+        {
 #ifdef COPROTO_LOGGING
-			setName("send_" + std::to_string(gProtoIdx++));
+            setName("send_" + std::to_string(gProtoIdx++));
 #endif
-		}
+        }
 
 
-		SendBuffer getBuffer()
-		{
-			SendBuffer ret;
-			ret.mStorage.emplace<MvSendBuffer<Container>>(std::move(mContainer));
-			return ret;
-		}
+        SendBuffer getBuffer()
+        {
+            SendBuffer ret;
+            ret.mStorage.emplace<MvSendBuffer<Container>>(std::move(mContainer));
+            return ret;
+        }
 
-		error_code resume_(Scheduler& sched) override {
-
-
-			if (mContainer.size() == 0)
-			{
-				mEc = code::sendLengthZeroMsg;
-				sched.fulfillDep(*this, mEc, nullptr);
-			}
-			else
-			{
-				sched.send_(getBuffer(), getSlot(), nullptr);
-				mEc = code::success;
-				sched.fulfillDep(*this, mEc, nullptr);
-			}
-			return mEc;
-		}
-
-		void setError(error_code ec, std::exception_ptr p) override {
-			assert(0 && "not supported (RefSendProto)");
-		}
-		std::exception_ptr getExpPtr() override {
-			return nullptr;
-		}
-
-		error_code getErrorCode() override {
-			return mEc;
-		}
-		bool done() override {
-			return mEc != code::suspend;
-		}
-	};
+        error_code resume_(Scheduler& sched) override {
 
 
-	template<typename Container>
-	ProtoV<void> send(Container& t)
-	{
-		ProtoV<void> proto;
-		proto.mBase.emplace<RefSendProto<Container>>(t);
-		return proto;
-	}
+            if (mContainer.size() == 0)
+            {
+                mEc = code::sendLengthZeroMsg;
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
+            else
+            {
+                sched.send_(getBuffer(), getSlot(), nullptr);
+                mEc = code::success;
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
+            return mEc;
+        }
 
-	template<typename Container>
-	ProtoV<void> send(Container&& t)
-	{
-		ProtoV<void> proto;
-		proto.mBase.emplace<MvSendProto<Container>>(std::forward<Container>(t));
-		return proto;
-	}
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(0 && "not supported (RefSendProto)");
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
 
-
-	template<typename Container>
-	ProtoV<void> recv(Container& t)
-	{
-		ProtoV<void> proto;
-		proto.mBase.emplace<RefRecvProto<Container>>(t);
-		return proto;
-	}
-
-
-	template<typename Container>
-	ProtoV<void> recvFixedSize(Container& t)
-	{
-		ProtoV<void> proto;
-		proto.mBase.emplace<RefRecvProto<Container, false>>(t);
-		return proto;
-	}
+        error_code getErrorCode() override {
+            return mEc;
+        }
+        bool done() override {
+            return mEc != code::suspend;
+        }
+    };
 
 
-	template<typename Container>
-	ProtoV<Container> recv()
-	{
-		ProtoV<Container> proto;
-		using Prom = MoveRecvProto<Container>;
-		internal::InlinePoly<Resumable, internal::inlineSize>& b = proto.mBase;
+    template<typename Container>
+    ProtoV<void> send(Container& t)
+    {
+        ProtoV<void> proto;
+        proto.mBase.emplace<RefSendProto<Container>>(t);
+        return proto;
+    }
+
+    template<typename Container>
+    ProtoV<void> send(Container&& t)
+    {
+        ProtoV<void> proto;
+        proto.mBase.emplace<MvSendProto<Container>>(std::forward<Container>(t));
+        return proto;
+    }
 
 
-		b.emplace<Prom>();
-		return proto;
-	}
+    template<typename Container>
+    ProtoV<void> recv(Container& t)
+    {
+        ProtoV<void> proto;
+        proto.mBase.emplace<RefRecvProto<Container, false>>(t);
+        return proto;
+    }
 
-	template<typename value_type>
-	ProtoV<std::vector<value_type>> recvVec()
-	{
-		return recv<std::vector<value_type>>();
-	}
+
+    template<typename Container>
+    ProtoV<void> recvResize(Container& t)
+    {
+        ProtoV<void> proto;
+        proto.mBase.emplace<RefRecvProto<Container, true>>(t);
+        return proto;
+    }
+
+
+    template<typename Container>
+    ProtoV<Container> recv()
+    {
+        ProtoV<Container> proto;
+        using Prom = MoveRecvProto<Container>;
+        internal::InlinePoly<Resumable, internal::inlineSize>& b = proto.mBase;
+
+
+        b.emplace<Prom>();
+        return proto;
+    }
+
+    template<typename value_type>
+    ProtoV<std::vector<value_type>> recvVec()
+    {
+        return recv<std::vector<value_type>>();
+    }
 
 
 

@@ -159,6 +159,7 @@
     <ClInclude Include="config.h" />
     <ClInclude Include="InlinePoly.h" />
     <ClInclude Include="LocalEvaluator.h" />
+    <ClInclude Include="Macros.h" />
     <ClInclude Include="Name.h" />
     <ClInclude Include="NativeProto.h" />
     <ClInclude Include="Optional.h" />

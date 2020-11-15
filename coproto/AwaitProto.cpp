@@ -371,7 +371,7 @@ namespace coproto
 				else
 				{
 					buff.resize(1);
-					co_await recvFixedSize(buff);
+					co_await recv(buff);
 				}
 			};
 			for (auto t : types)
@@ -429,12 +429,12 @@ namespace coproto
 				else
 				{
 					buff.resize(1);
-					auto ec = co_await recvFixedSize(buff).wrap();
+					auto ec = co_await recv(buff).wrap();
 
 					if (ec != code::badBufferSize)
 						throw std::runtime_error("");
 
-					ec = co_await recvFixedSize(buff).wrap();
+					ec = co_await recv(buff).wrap();
 					if (ec != code::ioError)
 					{
 						std::cout << ec.message() << std::endl;
@@ -760,7 +760,7 @@ namespace coproto
 		{
 
 			auto recvProto = [&]() -> Proto {
-				std::vector<u8> msg;
+				std::vector<u8> msg(10);
 				co_await recv(msg);
 				co_await EndOfRound();
 				co_await send(msg);
@@ -778,7 +778,7 @@ namespace coproto
 				co_await send(msg);
 			};
 			auto sendProto2 = [&]() -> Proto {
-				std::vector<u8> msg;
+				std::vector<u8> msg(10);
 				co_await sendProto();
 				co_await recv(msg);
 			};

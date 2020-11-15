@@ -137,7 +137,14 @@ namespace coproto
 					ec = code::badBufferSize;
 				else
 				{
-					ec = mSock->recv(d);
+					try
+					{
+						ec = mSock->recv(d);
+					}
+					catch (...)
+					{
+						ec = code::ioError;
+					}
 				}
 
 				if (ec == code::suspend)
@@ -262,24 +269,22 @@ namespace coproto
 	error_code Scheduler::recvHeader()
 	{
 		if (mHaveHeader)
-		{
-			//if (mPrint)
-			//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header **" << std::endl;
-
 			return {};
-		}
-		//if (mPrint)
-		//	std::cout << hexPtr(this) << " " << std::this_thread::get_id() << " recved header" << std::endl;
 
-		auto ec = mSock->recv(mRecvHeader);
-		if (ec)
+		try
 		{
-			//mSuspend = true;
-			return ec;
+			auto ec = mSock->recv(mRecvHeader);
+			if (ec)
+				return ec;
+		}
+		catch (...)
+		{
+			return code::ioError;
 		}
 
 		mHaveHeader = true;
-		return ec;
+		return {};
+
 	}
 
 	void Scheduler::recv(RecvBuffer* data, u32 slot, Resumable* res)
@@ -419,7 +424,13 @@ namespace coproto
 				getSendHeaderSlot() = slot;
 				getSendHeaderSize() = static_cast<u32>(data.size());
 
-				auto ec = mSock->send(mSendHeader);
+				error_code ec;
+				try {
+					ec = mSock->send(mSendHeader);
+				}catch(...)
+				{
+					ec = code::ioError;
+				}
 
 				if (ec == code::suspend)
 					return;
@@ -432,7 +443,15 @@ namespace coproto
 				mSentHeader = true;
 			}
 
-			auto ec = mSock->send(data);
+
+			error_code ec;
+			try {
+				ec = mSock->send(data);
+			}
+			catch (...)
+			{
+				ec = code::ioError;
+			}
 
 			if (ec == code::suspend)
 			{
