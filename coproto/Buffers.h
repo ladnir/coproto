@@ -444,7 +444,7 @@ namespace coproto
         error_code resume_(Scheduler& sched) override {
 
 
-            if (mContainer.size() == 0)
+            if (::coproto::size(mContainer) == 0)
             {
                 mEc = code::sendLengthZeroMsg;
                 sched.fulfillDep(*this, mEc, nullptr);

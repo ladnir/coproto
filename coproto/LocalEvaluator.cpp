@@ -11,10 +11,14 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
-		assert(mEval);
-		error_code ec = mEval->getError();
-		if (ec)
-			return ec;
+		error_code ec;
+		if (mEval)
+		{
+			ec = mEval->getError();
+			if (ec)
+				return ec;
+		}
+
 
 		if (mInbound.size())
 		{
@@ -44,10 +48,13 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
-		assert(mEval);
-		error_code ec = mEval->getError();
-		if (ec)
-			return ec;
+		error_code ec;
+		if (mEval)
+		{
+			ec = mEval->getError();
+			if (ec)
+				return ec;
+		}
 
 		mOutbound.emplace_back(data.begin(), data.end());
 		return {};
@@ -64,12 +71,14 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
+		error_code ec;
 		if (mEval)
 		{
-			error_code ec = mEval->getError();
+			ec = mEval->getError();
 			if (ec)
 				return ec;
 		}
+
 		const auto vec = mInbound.pop();
 
 		if (vec.size() == 0)
@@ -91,9 +100,10 @@ namespace coproto
 		if (mCanceled)
 			return code::ioError;
 
+		error_code ec;
 		if (mEval)
 		{
-			error_code ec = mEval->getError();
+			ec = mEval->getError();
 			if (ec)
 				return ec;
 		}
@@ -124,17 +134,18 @@ namespace coproto
 
 				if (!p0->done())
 				{
-					p0.evaluate(mSocks[0], print);
+					auto ec = p0.evaluate(mSocks[0], print);
 
-					sendMsgs(0);
+					sendMsgs(0, ec);
+
 					if (print)
 						std::cout << "-------------- p0 suspend --------------" << std::endl;
 				}
 				if (!p1->done())
 				{
-					p1.evaluate(mSocks[1], print);
+					auto ec = p1.evaluate(mSocks[1], print);
 
-					sendMsgs(1);
+					sendMsgs(1, ec);
 					if (print)
 						std::cout << "-------------- p1 suspend --------------" << std::endl;
 				}
@@ -155,13 +166,6 @@ namespace coproto
 		else if (type == Type::async)
 		{
 
-			//auto socketWorker = AsyncSock::Worker();
-			//mAsyncSock[0].mIdx = 0;
-			//mAsyncSock[1].mIdx = 1;
-			//mAsyncSock[0].mWorker = &mSocketWorker;
-			//mAsyncSock[1].mWorker = &mSocketWorker;
-			//socketWorker.mEval = this;
-			//socketWorker.mEval = this;
 			mSocketWorker.clear();
 
 			ThreadExecutor ex;
@@ -181,14 +185,6 @@ namespace coproto
 		}
 		else if (type == Type::asyncThread)
 		{
-
-			//auto socketWorker = AsyncSock::Worker();
-			//mAsyncSock[0].mIdx = 0;
-			//mAsyncSock[1].mIdx = 1;
-			//mAsyncSock[0].mWorker = &socketWorker;
-			//mAsyncSock[1].mWorker = &socketWorker;
-			//socketWorker.mEval = this;
-			//socketWorker.mEval = this;
 			mSocketWorker.clear();
 			mSocketWorker.startThread();
 
@@ -221,9 +217,18 @@ namespace coproto
 			throw std::runtime_error(COPROTO_LOCATION);
 
 		auto e0 = p0->getErrorCode();
+		auto e1 = p1->getErrorCode();
+
+		if (e0 && e1)
+		{
+			if (e0 == code::ioError)
+				return e1;
+			else
+				return e0;
+		}
+
 		if (e0)
 			return e0;
-		auto e1 = p1->getErrorCode();
 		if (e1)
 			return e1;
 		return {};
@@ -306,12 +311,16 @@ namespace coproto
 
 	void LocalEvaluator::AsyncSock::Worker::process(Op op)
 	{
-		assert(mEval);
-		if (mEval->mOpIdx == mEval->mErrorIdx)
+
+		error_code ec;
+		if (mEval && mEval->mOpIdx == mEval->mErrorIdx)
 		{
-			if (op.mCont)
-				op.mCont(code::ioError, 0);
+			ec = code::ioError;
 		}
+
+
+		if (ec && op.mCont)
+			op.mCont(ec, 0);
 		else if (mCanceled)
 		{
 			if (op.mCont)

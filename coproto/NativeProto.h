@@ -10,7 +10,7 @@ namespace coproto
 	{
 		error_code mEc = {};
 		std::exception_ptr mExPtr = nullptr;
-		u64 mState = 0;
+		u64 _resume_idx_ = 0;
 #ifdef COPROTO_LOGGING
 		u64 mProtoIdx;
 #endif

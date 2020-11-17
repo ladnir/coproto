@@ -11,12 +11,15 @@ namespace coproto
 	{
 		//The io operation completed successfully;
 		success = 0,
+		// The operation has been suspended.
+		suspend,
+		cancel,
+
+		remoteCancel,
 		//The io operation failed and the caller should abort;
 		ioError,
 		// bad buffer size. The reciever's buffer size does not match the number of bytes sent.
 		badBufferSize,
-		// The operation has been suspended.
-		suspend,
 		// sending a zero length message is not allowed.
 		sendLengthZeroMsg,
 		// The requested operation for not support async sockets.

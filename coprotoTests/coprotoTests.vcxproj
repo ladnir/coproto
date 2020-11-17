@@ -149,10 +149,20 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="cpp11Tutorial.cpp" />
+    <ClCompile Include="cpp20Tutorial.cpp" />
+    <ClCompile Include="ExampleProtocols.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="SocketTutorial.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="cpp11Tutorial.h" />
+    <ClInclude Include="cpp20Tutorial.h" />
+    <ClInclude Include="ExampleProtocols.h" />
+    <ClInclude Include="SocketTutorial.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -153,6 +153,7 @@
     <ClInclude Include="Buffers.h" />
     <ClInclude Include="AwaitProto.h" />
     <ClInclude Include="configDefault.h" />
+    <ClInclude Include="coproto.h" />
     <ClInclude Include="Defines.h" />
     <ClInclude Include="EndOfRound.h" />
     <ClInclude Include="error_code.h" />

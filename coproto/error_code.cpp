@@ -18,10 +18,15 @@ namespace { // anonymous namespace
 			{
 			case coproto::code::success:
 				return "coproto::code::success: The io operation completed successfully";
-			case coproto::code::ioError:
-				return "coproto::code::ioError: The io operation failed and the caller should abort";
 			case coproto::code::suspend:
 				return "coproto::code::suspend: The protocol has been suspended for some reason.";
+
+			case coproto::code::cancel:
+				return "coproto::code::cancel: The operation has been canceled by the local party.";
+			case coproto::code::remoteCancel:
+				return "coproto::code::remoteCancel: The operation has been cancels by the remote party.";					
+			case coproto::code::ioError:
+				return "coproto::code::ioError: The io operation failed and the caller should abort";
 			case coproto::code::badBufferSize:
 				return "coproto::code::badBufferSize: Bad buffer size. The reciever's buffer size does not match the number of bytes sent.";
 			case coproto::code::sendLengthZeroMsg:

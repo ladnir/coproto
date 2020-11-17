@@ -15,7 +15,7 @@
 		auto ec = this->await(X);			\
 		if (ec)						\
 		{							\
-			this->mState = __LINE__;		\
+			this->_resume_idx_ = __LINE__;		\
 			return ec;				\
 		}							\
 	}								\
@@ -28,7 +28,7 @@ do{{										\
 	auto ec = this->await(X);					\
 	if (ec)								\
 	{									\
-		this->mState = __LINE__;				\
+		this->_resume_idx_ = __LINE__;				\
 		return ec;						\
 	}									\
 }										\
@@ -43,7 +43,7 @@ res = std::move(*(typename decltype(X)::return_type*)(this->getAwaitReturn()));\
 #define CP_END_OF_ROUND() CP_AWAIT(::coproto::EndOfRound{})		
 
 #define CP_BEGIN()					\
-	switch(mState)					\
+	switch(this->_resume_idx_)					\
 	{								\
 	case 0:							\
 		do {}while(0)

@@ -262,13 +262,17 @@ namespace coproto
 			return {};
 		}
 
-		void sendMsgs(u64 sender)
+		void sendMsgs(u64 sender, error_code ec)
 		{
-			assert(mSocks[sender ^ 1].mInbound.size() == 0);
-			if (mSocks[sender].mCanceled)
+			auto error = ec && ec != code::suspend;
+
+			if (mSocks[sender].mCanceled || error)
 				mSocks[sender ^ 1].cancel();
 			else
+			{
+				//assert(mSocks[sender ^ 1].mInbound.size() == 0);
 				mSocks[sender ^ 1].mInbound = std::move(mSocks[sender].mOutbound);
+			}
 		}
 
 		error_code execute(internal::ProtoImpl& p0, internal::ProtoImpl& p1, Type type = Type::interlace, bool print = false);
