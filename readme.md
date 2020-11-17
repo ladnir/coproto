@@ -3,7 +3,7 @@
 
 Coproto is a c++11 or c++20 protocol framework based on coroutines. The framework supports a variety of socket types, e.g. blocking or asynchronous, and allows users to write their protocol once and have it optimally evaluated regardless. See the tuoritals in `coprotoTests/`.
 
-Echo server example:
+C++20 Echo server example:
 ```cpp
 Proto echoClient(std::string message) {
     co_await send(message);
@@ -29,7 +29,41 @@ void echoExample() {
     client.evaluate(sock);
 }
 ```
-  
+
+C++11 Echo server example:
+```cpp
+    coproto::Proto echoClient(std::string message) {
+        struct Impl : coproto::NativeProto {
+            std::string message;
+            Impl(std::string& s) :message(s) {}
+
+            coproto::error_code resume() override {
+                CP_BEGIN();
+                CP_AWAIT(coproto::send(std::move(message)));
+                CP_AWAIT(coproto::recvResize(message));
+                CP_END();
+                return{};
+            }
+        };
+        return coproto::makeProto<Impl>(message);
+    }
+
+    coproto::Proto echoServer() {
+        struct Impl : public coproto::NativeProto {
+            std::string message;
+            coproto::error_code resume() override {
+                CP_BEGIN();
+                CP_AWAIT(coproto::recvResize(message));
+                CP_AWAIT(coproto::send(message));
+                CP_END();
+                return{};
+            }
+        };
+        return coproto::makeProto<Impl>();
+    }
+```
+
+
 ### Unix
 To build the libary with c++ coroutine support pass `-DENABLE_CPP20=ON` and otherwise `-DENABLE_CPP20=OFF` for c++11.
 ```
