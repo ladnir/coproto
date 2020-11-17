@@ -46,11 +46,29 @@ namespace coproto
 		struct BlockingSock : public Socket
 		{
 			BlockingSock() = default;
-			BlockingSock(BlockingSock&&) = default;
+			BlockingSock(BlockingSock&& o)
+			{
+				*this = std::move(o);
+			}
 
-			BlockingSock& operator=(BlockingSock&&) = default;
+			BlockingSock& operator=(BlockingSock&& o)
+			{
+				assert(mOther == nullptr);
+				mOther = o.mOther;
+				mEval = o.mEval;
+				mCanceled = o.mCanceled;
+				mInbound = std::move(o.mInbound);
 
-			BlockingSock* mOther;
+				mOther->mOther = this;
+
+				o.mOther = nullptr;
+				o.mEval = nullptr;
+				o.mCanceled = false;
+
+				return *this;
+			}
+
+			BlockingSock* mOther = nullptr;
 			LocalEvaluator* mEval = nullptr;
 			bool mCanceled = false;
 			BlockingQueue<std::vector<u8>> mInbound;
