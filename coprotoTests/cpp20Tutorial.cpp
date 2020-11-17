@@ -5,6 +5,9 @@
 
 using namespace coproto;
 
+#ifdef COPROTO_CPP20
+
+
 Proto echoClient(std::string message)
 {
 
@@ -290,3 +293,9 @@ void cpp20Tutorial()
 	subprotoExample();
 	asyncExample();
 }
+#else
+
+void cpp20Tutorial()
+{}
+
+#endif

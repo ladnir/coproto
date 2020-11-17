@@ -3,6 +3,32 @@
 
 Coproto is a c++11 or c++20 protocol framework based on coroutines. The framework supports a variety of socket types, e.g. blocking or asynchronous, and allows users to write their protocol once and have it optimally evaluated regardless. See the tuoritals in `coprotoTests/`.
 
+Echo server example"
+```cpp
+Proto echoClient(std::string message) {
+	co_await send(message);
+	co_await recv(message);
+}
+Proto echoServer() {
+	std::string message;
+	co_await recv(message);
+	co_await send(message);
+}
+
+void echoExample() {
+    // lazily construct protocol objects
+	Proto server = echoServer();
+	Proto client = echoClient("hello world");
+
+	// Execute the protocol. eval will run both parts.
+	LocalEvaluator eval;
+	eval.execute(server, client);
+
+    // or execute a single protocol as
+    Socket sock = ...;
+    client.evaluate(sock);
+}
+```
   
 ### Unix
 To build the libary with c++ coroutine support pass `-DENABLE_CPP20=ON` and otherwise `-DENABLE_CPP20=OFF` for c++11.

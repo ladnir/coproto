@@ -1,5 +1,6 @@
 #include "ExampleProtocols.h"
 
+#include "coproto/NativeProto.h"
 #include "coproto/Macros.h"
 
 namespace examples
