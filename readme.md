@@ -60,7 +60,7 @@ C++11 Echo server example:
                 return{};
             }
         };
-        return coproto::makeProto<Impl>();
+        return makeProto<Impl>();
     }
 ```
 
