@@ -84,6 +84,8 @@ namespace coproto
 				mCont = {};
 			}
 
+			mWork = {};
+
 			if (mExecutor)
 			{
 				mExecutor = nullptr;

@@ -370,29 +370,15 @@ namespace {
 		// methods of acheiving a similar result such as boost::asio::strand.
 		ThreadExecutor executor;
 
-		bool bothDone = false;
-
 		client.evaluate(sock0, [&](error_code ec) {
 			// when the async protocol completes, this function will be called
 			std::cout << "client finished with ec = " << ec.message() << std::endl;
-
-			// we will need to stop the executor when they are both done.
-			if (bothDone)
-				executor.stop();
-			else
-				bothDone = true;
 
 			}, executor);
 
 		server.evaluate(sock1, [&](error_code ec) {
 			// when the async protocol completes, this function will be called
 			std::cout << "server finished with ec = " << ec.message() << std::endl;
-
-			// we will need to stop the executor when they are both done.
-			if (bothDone)
-				executor.stop();
-			else
-				bothDone = true;
 
 			}, executor);
 

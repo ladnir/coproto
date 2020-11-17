@@ -59,17 +59,67 @@ namespace coproto
 		virtual void cancel() = 0;
 	};
 
+
+	class Work
+	{
+	public:
+
+		struct Impl
+		{
+			virtual ~Impl() = default;
+		};
+
+		Work() = default;
+		Work(Work&&) = default;
+
+		Work(std::unique_ptr<Impl> i)
+			:mBase(std::move(i))
+		{}
+
+		Work& operator=(Work&&) = default;
+
+		std::unique_ptr<Impl> mBase;
+	};
+
 	class Executor
 	{
 	public:
+		virtual ~Executor() = default;
 		virtual void dispatch(std::function<void()>&& fn) = 0;
+
+		virtual Work getWork() = 0;
 	};
 
 	class ThreadExecutor : public Executor
 	{
 	public:
+		struct WorkImpl : public Work::Impl
+		{
+			ThreadExecutor* mEx;
+
+			WorkImpl(ThreadExecutor* e)
+				: mEx(e)
+			{
+				++mEx->mWork;
+			}
+
+			~WorkImpl()
+			{
+				auto p = mEx;
+				mEx->mQueue.emplace([p]() {
+					--p->mWork;
+					});
+			}
+		};
+
+		ThreadExecutor() = default;
+		ThreadExecutor(ThreadExecutor&&) = delete;
+
+
 		BlockingQueue<std::function<void()>> mQueue;
 		std::thread::id mThreadId;
+		bool mRunning = false;
+		u64 mWork = 0;
 
 		void dispatch(std::function<void()>&& fn) override
 		{
@@ -78,23 +128,37 @@ namespace coproto
 			else
 				mQueue.push(std::move(fn));
 		}
-		void stop()
+
+		Work getWork()
 		{
-			mQueue.emplace();
+			return Work(make_unique<WorkImpl>(this));
 		}
+
+		//void stop()
+		//{
+		//	mQueue.emplace();
+		//}
 
 		void run()
 		{
 			mThreadId = std::this_thread::get_id();
+			if (mRunning)
+				throw std::runtime_error("a thread is already running");
+			mRunning = true;
 
 			while (true)
 			{
-				auto fn = mQueue.pop();
+				u64 size;
+				auto fn = mQueue.popWithSize(size);
 
 				if (fn)
 					fn();
-				else
+
+				if(mWork == 0 && size == 0)
+				{
+					mRunning = false;
 					return;
+				}
 			}
 		}
 	};
@@ -115,6 +179,7 @@ namespace coproto
 		Socket* mSock = nullptr;
 		AsyncSocket* mASock = nullptr;
 		Executor* mExecutor = nullptr;
+		Work mWork;
 
 		std::function<void(error_code)> mCont;
 

@@ -77,6 +77,16 @@ namespace coproto
 			mState->d_queue.pop_back();
 			return rc;
 		}
+
+
+		T popWithSize(u64& size) {
+			std::unique_lock<std::mutex> lock(mState->d_mutex);
+			mState->d_condition.wait(lock, [this] { return !mState->d_queue.empty(); });
+			T rc(std::move(mState->d_queue.back()));
+			mState->d_queue.pop_back();
+			size = mState->d_queue.size();
+			return rc;
+		}
 	};
 
 }

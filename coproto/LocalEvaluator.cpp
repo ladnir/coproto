@@ -169,12 +169,7 @@ namespace coproto
 			mSocketWorker.clear();
 
 			ThreadExecutor ex;
-			bool done = false;
 			auto cc = [&](error_code ec) {
-				if (done)
-					ex.stop();
-				else
-					done = true;
 			};
 
 			p0.evaluate(mAsyncSock[0], cc, ex, print);
@@ -190,18 +185,12 @@ namespace coproto
 
 			ThreadExecutor ex;
 
-			std::array<bool, 2> done = { false, false };
-
-			auto cc = [&](error_code ec, u64 p) {
-				if (done[p ^ 1])
-					ex.stop();
-				else
-					done[p] = true;
+			auto cc = [&](error_code ec) {
 			};
 
-			p0.evaluate(mAsyncSock[0], [&](error_code ec) { cc(ec, 0); }, ex, print);
-			p1.evaluate(mAsyncSock[1], [&](error_code ec) { cc(ec, 1); }, ex, print);
-
+			p0.evaluate(mAsyncSock[0], cc, ex, print);
+			p1.evaluate(mAsyncSock[1], cc, ex, print);
+									   
 			ex.run();
 			mSocketWorker.join();
 

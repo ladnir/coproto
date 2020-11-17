@@ -61,6 +61,7 @@ namespace coproto
 				mSched->mASock = &sock;
 				mSched->mExecutor = &ex;
 				mSched->mCont = std::move(cont);
+				mSched->mWork = ex.getWork();
 				mSched->mPrint = print;
 
 				mSched->dispatch([this]() {
