@@ -24,7 +24,7 @@ void echoExample() {
     LocalEvaluator eval;
     eval.execute(server, client);
 
-    // or execute a single protocol as
+    // or execute a single protocol with your socket
     Socket sock = ...;
     client.evaluate(sock);
 }
