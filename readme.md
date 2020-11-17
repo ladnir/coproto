@@ -66,16 +66,16 @@ C++11 Echo server example:
 
 
 ### Unix
-To build the libary with c++20 coroutine support pass `-DENABLE_CPP20=ON` and otherwise `-DENABLE_CPP20=OFF` for c++11.
+To build the libary with c++20 coroutine support pass `-D COPROTO_CPP20=ON` and otherwise `-D COPROTO_CPP20=OFF` for c++11.
 ```
-cmake . -DENABLE_CPP20=ON
+cmake . -D COPROTO_CPP20=ON
 ```
 
 The unit tests can be run by calling `./bin/coprotoTests -u` and the tutorials with `./bin/coprotoTests`. 
 
 ### Windows
 
-Open visual studio solution. Pass program argument `-u` to run tests. Define `DENABLE_CPP20` in `coproto/configDefault.h` as desired and set the c++ standard accordingly.
+Open visual studio solution. Pass program argument `-u` to run tests. Define `COPROTO_CPP20` in `coproto/configDefault.h` as desired and set the c++ standard accordingly.
 
 
  ## License
