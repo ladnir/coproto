@@ -5,6 +5,7 @@
 #include "coproto/InlinePoly.h"
 #include "coproto/TypeTraits.h"
 #include <vector>
+#include <cassert>
 
 namespace coproto
 {
@@ -50,6 +51,21 @@ namespace coproto
 		virtual void setError(error_code e, std::exception_ptr p) = 0;
 		virtual std::exception_ptr getExpPtr() = 0;
 		virtual error_code getErrorCode() = 0;
+	};
+
+	struct NoOp : public Resumable
+	{
+	public:
+		NoOp() = default;
+		NoOp(const NoOp&) = default;
+		NoOp(NoOp&&) = default;
+
+		error_code resume_(Scheduler& sched) override;
+		bool done() override { return true; };
+		void* getValue() override { return nullptr; };
+		void setError(error_code e, std::exception_ptr p)override { assert(0); };
+		std::exception_ptr getExpPtr()override { return {}; }
+		error_code getErrorCode()override { return {}; };
 	};
 
 

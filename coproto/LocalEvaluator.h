@@ -45,6 +45,11 @@ namespace coproto
 
 		struct BlockingSock : public Socket
 		{
+			BlockingSock() = default;
+			BlockingSock(BlockingSock&&) = default;
+
+			BlockingSock& operator=(BlockingSock&&) = default;
+
 			BlockingSock* mOther;
 			LocalEvaluator* mEval = nullptr;
 			bool mCanceled = false;
@@ -106,7 +111,10 @@ namespace coproto
 			{
 				Worker() = default;
 				Worker(Worker&&) = default;
-
+				~Worker()
+				{
+					join();
+				}
 				BlockingQueue<Op> mWorkQueue;
 
 				LocalEvaluator* mEval = nullptr;
@@ -114,8 +122,18 @@ namespace coproto
 				std::thread mThread;
 
 				std::array<Op, 2> mSend, mRecv;
-				std::array<bool, 2> mStopped;
+				std::array<bool, 2> mStopped{ false, false };
 				bool mCanceled;
+
+				void clear()
+				{
+					join();
+					mWorkQueue.clear();
+					mSend = std::array<Op, 2>{};
+					mRecv = std::array<Op, 2>{};
+					mStopped = { false, false };
+					mCanceled = false;
+				}
 
 				void startThread();
 
@@ -130,6 +148,7 @@ namespace coproto
 					{
 						mWorkQueue.emplace(0, Op::join);
 						mThread.join();
+						mHasThread = false;
 					}
 				}
 			};
@@ -175,7 +194,46 @@ namespace coproto
 		std::array<InterlaceSock, 2> mSocks;
 		std::array<BlockingSock, 2> mBlkSocks;
 		std::array<AsyncSock, 2> mAsyncSock;
+		AsyncSock::Worker mSocketWorker;;
+
+
+		std::array<BlockingSock, 2> getSocketPair()
+		{
+			std::array<BlockingSock, 2> bb;
+			bb[0].mEval = this;
+			bb[1].mEval = this;
+			bb[0].mOther = &bb[1];
+			bb[1].mOther = &bb[0];
+
+			return bb;
+		}
 		//std::array<Scheduler, 2> mScheds;
+
+		LocalEvaluator() 
+		{
+
+			mSocks[0].mEval = this;
+			mSocks[1].mEval = this;
+			mBlkSocks[0].mEval = this;
+			mBlkSocks[1].mEval = this;
+			mBlkSocks[0].mOther = &mBlkSocks[1];
+			mBlkSocks[1].mOther = &mBlkSocks[0];
+
+			mAsyncSock[0].mIdx = 0;
+			mAsyncSock[1].mIdx = 1;
+			mAsyncSock[0].mWorker = &mSocketWorker;
+			mAsyncSock[1].mWorker = &mSocketWorker;
+			mSocketWorker.mEval = this;
+			
+			//auto socketWorker = AsyncSock::Worker();
+			//mAsyncSock[0].mIdx = 0;
+			//mAsyncSock[1].mIdx = 1;
+			//mAsyncSock[0].mWorker = &socketWorker;
+			//mAsyncSock[1].mWorker = &socketWorker;
+			//socketWorker.mEval = this;
+			//socketWorker.mEval = this;
+		}
+
 		u64 mOpIdx = 0;
 		u64 mErrorIdx = ~0ull;
 

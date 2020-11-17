@@ -72,7 +72,7 @@ namespace coproto
 	}
 
 	template<typename T = void>
-	class ProtoV
+	class [[nodiscard]] ProtoV
 	{
 	public:
 		using promise_type = internal::ProtoPromise<T>;
@@ -80,9 +80,14 @@ namespace coproto
 		internal::ProtoImpl mBase;
 
 
-		ProtoV() = default;
+		ProtoV()
+		{
+			mBase.emplace<NoOp>();
+		}
 		ProtoV(const ProtoV&) = delete;
 		ProtoV(ProtoV&&) = default;
+
+		ProtoV& operator=(ProtoV&&) = default;
 
 		using return_type = T;
 		using wrap_type = typename internal::WrapPromise<T>::type;

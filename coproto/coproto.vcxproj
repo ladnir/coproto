@@ -181,6 +181,7 @@
     <ClCompile Include="LocalEvaluator.cpp" />
     <ClCompile Include="NativeProto.cpp" />
     <ClCompile Include="AwaitProto.cpp" />
+    <ClCompile Include="Resumable.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="InlineVector.cpp" />
     <ClCompile Include="Tests.cpp" />

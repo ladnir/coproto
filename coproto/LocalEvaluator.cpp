@@ -112,25 +112,11 @@ namespace coproto
 #endif
 
 		mOpIdx = 0;
-		//p0.mSlotIdx = 0;
-		//p1.mSlotIdx = 0;
-		//mScheds[0].scheduleReady(p0);
-		//mScheds[1].scheduleReady(p1);
-		//mScheds[0].mRoundIdx = 0;
-		//mScheds[1].mRoundIdx = 0;
-		assert(p0.mData->done() == false);
-		assert(p1.mData->done() == false);
-
-
+		//assert(p0.mData->done() == false);
+		//assert(p1.mData->done() == false);
 
 		if (type == Type::interlace)
 		{
-
-			//mScheds[0].mSock = &mSocks[0];
-			//mScheds[1].mSock = &mSocks[1];
-			mSocks[0].mEval = this;
-			mSocks[1].mEval = this;
-
 
 
 			while (!p0->done() || !p1->done())
@@ -138,12 +124,6 @@ namespace coproto
 
 				if (!p0->done())
 				{
-
-					//p0.mSched.reset(new Scheduler);
-					//p0.mSched->scheduleReady(*p0.get());
-					//p0.mSched->mPrint = true;
-					//p0.get()->mSlotIdx = 0;
-
 					p0.evaluate(mSocks[0], print);
 
 					sendMsgs(0);
@@ -152,11 +132,6 @@ namespace coproto
 				}
 				if (!p1->done())
 				{
-					//p1.mSched.reset(new Scheduler);
-					//p1.mSched->scheduleReady(*p1.get());
-					//p1.mSched->mPrint = true;
-					//p1.get()->mSlotIdx = 0;
-
 					p1.evaluate(mSocks[1], print);
 
 					sendMsgs(1);
@@ -168,11 +143,6 @@ namespace coproto
 		}
 		else if (type == Type::blocking)
 		{
-			mBlkSocks[0].mEval = this;
-			mBlkSocks[1].mEval = this;
-			mBlkSocks[0].mOther = &mBlkSocks[1];
-			mBlkSocks[1].mOther = &mBlkSocks[0];
-
 			auto thrd = std::thread([&]() {
 				p0.evaluate(mBlkSocks[0], print);
 				});
@@ -185,13 +155,14 @@ namespace coproto
 		else if (type == Type::async)
 		{
 
-			auto socketWorker = AsyncSock::Worker();
-			mAsyncSock[0].mIdx = 0;
-			mAsyncSock[1].mIdx = 1;
-			mAsyncSock[0].mWorker = &socketWorker;
-			mAsyncSock[1].mWorker = &socketWorker;
-			socketWorker.mEval = this;
-			socketWorker.mEval = this;
+			//auto socketWorker = AsyncSock::Worker();
+			//mAsyncSock[0].mIdx = 0;
+			//mAsyncSock[1].mIdx = 1;
+			//mAsyncSock[0].mWorker = &mSocketWorker;
+			//mAsyncSock[1].mWorker = &mSocketWorker;
+			//socketWorker.mEval = this;
+			//socketWorker.mEval = this;
+			mSocketWorker.clear();
 
 			ThreadExecutor ex;
 			bool done = false;
@@ -211,21 +182,22 @@ namespace coproto
 		else if (type == Type::asyncThread)
 		{
 
-			auto socketWorker = AsyncSock::Worker();
-			mAsyncSock[0].mIdx = 0;
-			mAsyncSock[1].mIdx = 1;
-			mAsyncSock[0].mWorker = &socketWorker;
-			mAsyncSock[1].mWorker = &socketWorker;
-			socketWorker.mEval = this;
-			socketWorker.mEval = this;
-			socketWorker.startThread();
+			//auto socketWorker = AsyncSock::Worker();
+			//mAsyncSock[0].mIdx = 0;
+			//mAsyncSock[1].mIdx = 1;
+			//mAsyncSock[0].mWorker = &socketWorker;
+			//mAsyncSock[1].mWorker = &socketWorker;
+			//socketWorker.mEval = this;
+			//socketWorker.mEval = this;
+			mSocketWorker.clear();
+			mSocketWorker.startThread();
 
 			ThreadExecutor ex;
 
 			std::array<bool, 2> done = { false, false };
-			
-			auto cc = [&](error_code ec,u64 p) {
-				if (done[p^1])
+
+			auto cc = [&](error_code ec, u64 p) {
+				if (done[p ^ 1])
 					ex.stop();
 				else
 					done[p] = true;
@@ -235,7 +207,7 @@ namespace coproto
 			p1.evaluate(mAsyncSock[1], [&](error_code ec) { cc(ec, 1); }, ex, print);
 
 			ex.run();
-			socketWorker.join();
+			mSocketWorker.join();
 
 		}
 		else
@@ -259,24 +231,26 @@ namespace coproto
 
 	void LocalEvaluator::AsyncSock::Worker::startThread()
 	{
-		mHasThread = true;
+		if (mHasThread == false)
+		{
+			mHasThread = true;
+			mThread = std::thread([this]() {
 
-		mThread = std::thread([this]() {
+				mStopped[0] = false;
+				mStopped[1] = false;
+				mCanceled = false;
 
-			mStopped[0] = false;
-			mStopped[1] = false;
-			mCanceled = false;
+				while (true)
+				{
+					auto op = mWorkQueue.pop();
 
-			while (true)
-			{
-				auto op = mWorkQueue.pop();
-
-				if (op.mType == Op::join)
-					return;
-				else
-					process(std::move(op));
-			}
+					if (op.mType == Op::join)
+						return;
+					else
+						process(std::move(op));
+				}
 			});
+		}
 	}
 
 	void LocalEvaluator::AsyncSock::Worker::completeOp(u64 i)

@@ -46,6 +46,12 @@ namespace coproto
 		}
 
 
+		void clear()
+		{
+			std::unique_lock<std::mutex> lock(mState->d_mutex);
+			mState->d_queue.clear();
+		}
+
 
 		void push(T&& value) {
 			{

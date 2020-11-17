@@ -9,6 +9,7 @@ namespace coproto
 #ifdef COPROTO_LOGGING
 	u64  gProtoIdx(0);
 #endif
+	std::string hexPtr(void* p);
 
 	error_code Scheduler::resume(Resumable* proto)
 	{
@@ -134,7 +135,13 @@ namespace coproto
 
 				auto d = data->asSpan(getRecvHeaderSize());
 				if (d.size() != getRecvHeaderSize())
+				{
 					ec = code::badBufferSize;
+					if (mPrint)
+						std::cout << ec.message()
+						<< "\nBytes received = " << getRecvHeaderSize()
+						<< "\nSize of buffer = " << d.size() << std::endl;
+				}
 				else
 				{
 					try
@@ -489,7 +496,8 @@ namespace coproto
 			if (res)
 			{
 				res->setError(ec, nullptr);
-				mReady.push_back(res);
+				resume(res);
+				//mReady.push_back(res);
 			}
 
 			mRecvBuffers.erase(iter);
@@ -518,7 +526,8 @@ namespace coproto
 			if (res)
 			{
 				res->setError(ec, nullptr);
-				mReady.push_back(res);
+				resume(res);
+				//mReady.push_back(res);
 			}
 
 			mSendBuffers.pop_front();

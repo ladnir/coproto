@@ -185,6 +185,76 @@ namespace coproto
 
     };
 
+
+    template<typename T>
+    class SpanRecvProto : public Resumable, public RecvBuffer
+    {
+    public:
+        span<T> mContainer;
+        error_code mEc = code::suspend;
+        enum class Status
+        {
+            Uninit,
+            Inprogress,
+            Done
+        };
+        Status mStatus = Status::Uninit;
+
+
+        SpanRecvProto(span<T> t)
+            :mContainer(t)
+        {
+#ifdef COPROTO_LOGGING
+            setName("recv_" + std::to_string(gProtoIdx++));
+#endif
+        }
+
+        span<u8> asSpan(u64 size) override
+        {
+            return internal::asSpan(mContainer);
+        }
+
+        error_code resume_(Scheduler& sched) override {
+
+            if (mStatus == Status::Uninit)
+            {
+                mStatus = Status::Inprogress;
+                sched.recv(this, getSlot(), this);
+            }
+            else if (mStatus == Status::Inprogress)
+            {
+                mStatus = Status::Done;
+                if (mEc == code::suspend)
+                    mEc = {};
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
+
+            if (done())
+            {
+                return mEc;
+            }
+
+            return code::suspend;
+        }
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(ec != code::suspend);
+            assert(p == nullptr && "exception_ptr not supported (RefRecvProto)");
+            mEc = ec;
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
+
+        error_code getErrorCode() override {
+            return mEc;
+        }
+
+        bool done() override {
+            return mStatus == Status::Done;
+        }
+
+    };
+
     template<typename Container>
     class RefSendProto : public SendProto
     {
@@ -212,6 +282,87 @@ namespace coproto
         {
             SendBuffer ret;
             ret.mStorage.emplace<RefSendBuffer<Container>>(mContainer);
+            return ret;
+        }
+
+        error_code resume_(Scheduler& sched) override
+        {
+            if (mStatus == Status::Uninit)
+            {
+                if (::coproto::size(mContainer) == 0)
+                {
+                    mEc = code::sendLengthZeroMsg;
+                    mStatus = Status::Done;
+                    sched.fulfillDep(*this, mEc, nullptr);
+                }
+                else
+                {
+                    mStatus = Status::Inprogress;
+                    sched.send_(getBuffer(), getSlot(), this);
+                }
+            }
+            else if (mStatus == Status::Inprogress)
+            {
+                mStatus = Status::Done;
+                if (mEc == code::suspend)
+                    mEc = {};
+                sched.fulfillDep(*this, mEc, nullptr);
+            }
+
+            if (done())
+            {
+                return mEc;
+            }
+
+            return code::suspend;
+        }
+
+
+        void setError(error_code ec, std::exception_ptr p) override {
+            assert(ec != code::suspend);
+            assert(p == nullptr);
+            mEc = ec;
+        }
+        std::exception_ptr getExpPtr() override {
+            return nullptr;
+        }
+
+        error_code getErrorCode() override {
+            return mEc;
+        }
+
+        bool done() override {
+            return mStatus == Status::Done;
+        }
+    };
+
+    template<typename T>
+    class SpanSendProto : public SendProto
+    {
+    public:
+        span<T> mContainer;
+        error_code mEc = code::suspend;
+
+        enum class Status
+        {
+            Uninit,
+            Inprogress,
+            Done,
+        };
+        Status mStatus = Status::Uninit;
+
+        SpanSendProto(span<T> t)
+            :mContainer(t)
+        {
+#ifdef COPROTO_LOGGING
+            setName("send_" + std::to_string(gProtoIdx++));
+#endif
+        }
+
+        SendBuffer getBuffer()
+        {
+            SendBuffer ret;
+            ret.mStorage.emplace<MvSendBuffer<span<T>>>(std::move(mContainer));
             return ret;
         }
 
@@ -322,6 +473,14 @@ namespace coproto
         }
     };
 
+    template<typename T>
+    Proto send(span<T> t)
+    {
+
+        ProtoV<void> proto;
+        proto.mBase.emplace<SpanSendProto<T>>(t);
+        return proto;
+    }
 
     template<typename Container>
     ProtoV<void> send(Container& t)
@@ -339,6 +498,14 @@ namespace coproto
         return proto;
     }
 
+    template<typename T>
+    Proto recv(span<T> t)
+    {
+
+        ProtoV<void> proto;
+        proto.mBase.emplace<SpanRecvProto<T>>(t);
+        return proto;
+    }
 
     template<typename Container>
     ProtoV<void> recv(Container& t)
