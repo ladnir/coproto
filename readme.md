@@ -1,7 +1,7 @@
 Coproto
 =====
 
-Coproto is a c++11 or c++20 protocol framework based on coroutines. The framework supports a variety of socket types, e.g. blocking or asynchronous, and allows users to write their protocol once and have it optimally evaluated regardless. See the tutoritals [c++20](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp), [c++11](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp11Tutorial.cpp), [socket](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp).
+Coproto is a c++11 or c++20 protocol framework based on coroutines. The framework supports a variety of socket types, e.g. blocking or asynchronous, and allows users to write their protocol once and have it optimally evaluated regardless. See the tutoritals [C++20](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp), [C++11](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp11Tutorial.cpp), [Custom Socket](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp).
 
 C++20 Echo server example:
 ```cpp
