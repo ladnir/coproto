@@ -9,8 +9,8 @@
 #endif
 
 #if defined(COPROTO_USE_CMAKE_CONFIG)
-	#include "configCMake.h"
+	#include "coproto/configCMake.h"
 #else
-	#include "configDefault.h"
+	#include "coproto/configDefault.h"
 #endif
 
