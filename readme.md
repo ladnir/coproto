@@ -1,7 +1,9 @@
 Coproto
 =====
 
-Coproto is a c++11 or c++20 protocol framework based on coroutines. The framework supports a variety of socket types, e.g. blocking or asynchronous, and allows users to write their protocol once and have it optimally evaluated regardless. See the tutoritals [C++20](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp), [C++11](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp11Tutorial.cpp), [Custom Socket](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp).
+Coproto is a C++11 or C++20 "bring your own socket" protocol framework. The goal of the library to allow you to write your protocol once and run it in any evironment. In particular, protocols can be written in a synchronous manner while allowing their executions to be asynchronous. This is acheived through a "coroutine" abstraction layer which allows users to write protocol in a natural and composable manner. With C++20, users can laverage the coroutine language support to have highly readable code. To enable backwards compatibility users can also use the C++11 compatibility layer.
+
+See the tutoritals [C++20](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp), [C++11](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp11Tutorial.cpp), [Custom Socket](https://github.com/ladnir/coproto/blob/master/coprotoTests/cpp20Tutorial.cpp).
 
 C++20 Echo server example:
 ```cpp
@@ -32,28 +34,28 @@ void echoExample() {
 
 C++11 Echo server example:
 ```cpp
-    coproto::Proto echoClient(std::string message) {
-        struct Impl : coproto::NativeProto {
+    Proto echoClient(std::string message) {
+        struct Impl : NativeProto {
             std::string message;
             Impl(std::string& s) :message(s) {}
-            coproto::error_code resume() override {
+            error_code resume() override {
                 CP_BEGIN();
-                CP_AWAIT(coproto::send(std::move(message)));
-                CP_AWAIT(coproto::recvResize(message));
+                CP_AWAIT(send(message));
+                CP_AWAIT(recv(message));
                 CP_END();
                 return{};
             }
         };
-        return coproto::makeProto<Impl>(message);
+        return makeProto<Impl>(message);
     }
 
-    coproto::Proto echoServer() {
-        struct Impl : public coproto::NativeProto {
+    Proto echoServer() {
+        struct Impl : public NativeProto {
             std::string message;
-            coproto::error_code resume() override {
+            error_code resume() override {
                 CP_BEGIN();
-                CP_AWAIT(coproto::recvResize(message));
-                CP_AWAIT(coproto::send(message));
+                CP_AWAIT(recv(message));
+                CP_AWAIT(send(message));
                 CP_END();
                 return{};
             }
