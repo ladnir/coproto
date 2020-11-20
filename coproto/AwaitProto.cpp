@@ -7,6 +7,7 @@
 #include "coproto/LocalEvaluator.h"
 #include "coproto/Tests.h"
 
+#include "coproto/Socket.h"
 
 
 namespace coproto
@@ -20,7 +21,7 @@ namespace coproto
 			auto types = { LocalEvaluator::interlace, LocalEvaluator::blocking, LocalEvaluator::async, LocalEvaluator::asyncThread };
 		}
 
-		ProtoV<int> echoServer(u64 i, u64 length, u64 rep, std::string name, bool v)
+		ProtoV<int> echoServer(Socket& ss, u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
 #ifdef COPROTO_LOGGING
 			auto np = name + "_server_" + std::to_string(i) + "_" + std::to_string(length);
@@ -39,7 +40,7 @@ namespace coproto
 
 			for (u64 i = 0; i < rep; ++i)
 			{
-				auto r = recv<std::vector<char>>();
+				auto r = ss.recv<std::vector<char>>();
 #ifdef COPROTO_LOGGING
 				r.setName(np + "_r" + std::to_string(i));
 #endif
@@ -60,7 +61,7 @@ namespace coproto
 				std::cout << name << " s send " << i << " " << length << std::endl;
 			for (u64 i = 0; i < rep; ++i)
 			{
-				auto s = send(msg);
+				auto s = ss.send(msg);
 #ifdef COPROTO_LOGGING
 				s.setName(np + "_s" + std::to_string(i));
 #endif
@@ -70,7 +71,7 @@ namespace coproto
 			co_await EndOfRound();
 			if (i)
 			{
-				co_return co_await echoServer(i - 1, length, rep, name, v);
+				co_return co_await echoServer(ss, i - 1, length, rep, name, v);
 			}
 			else
 			{
@@ -79,7 +80,7 @@ namespace coproto
 				co_return 0;
 			}
 		}
-		ProtoV<int> echoClient(u64 i, u64 length, u64 rep, std::string name, bool v)
+		ProtoV<int> echoClient(Socket& ss, u64 i, u64 length, u64 rep, std::string name, bool v)
 		{
 #ifdef COPROTO_LOGGING
 			auto np = name + "_client_" + std::to_string(i) + "_" + std::to_string(length);
@@ -94,7 +95,7 @@ namespace coproto
 				std::cout << name << " c send " << i << " " << length << std::endl;
 			for (u64 i = 0; i < rep; ++i)
 			{
-				auto s = send(msg);
+				auto s = ss.send(msg);
 #ifdef COPROTO_LOGGING
 				s.setName(np + "_s" + std::to_string(i));
 #endif
@@ -108,7 +109,7 @@ namespace coproto
 			for (u64 i = 0; i < rep; ++i)
 			{
 
-				auto r = recv<std::vector<char>>();
+				auto r = ss.recv<std::vector<char>>();
 #ifdef COPROTO_LOGGING
 				r.setName(np + "_r" + std::to_string(i));
 #endif
@@ -125,7 +126,7 @@ namespace coproto
 
 			if (i)
 			{
-				co_return co_await echoClient(i - 1, length, rep, name, v);
+				co_return co_await echoClient(ss, i - 1, length, rep, name, v);
 			}
 			else
 			{
@@ -141,17 +142,17 @@ namespace coproto
 
 		void coawait_strSendRecv_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 				std::string str("hello from 0");
 
 				for (u64 i = 0; i < 5; ++i)
 				{
 					if (party)
 					{
-						co_await send(str);
+						co_await s.send(str);
 						co_await EndOfRound();
 
-						str = co_await recv<std::string>();
+						str = co_await s.recv<std::string>();
 
 						if (str != "hello from " + std::to_string(i * 2 + 1))
 							throw std::runtime_error(COPROTO_LOCATION);
@@ -159,13 +160,13 @@ namespace coproto
 					}
 					else
 					{
-						co_await recv(str);
+						co_await s.recv(str);
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
 							throw std::runtime_error(COPROTO_LOCATION);
 
 						str.back() += 1;
-						co_await send(str);
+						co_await s.send(str);
 						co_await EndOfRound();
 					}
 				}
@@ -176,10 +177,11 @@ namespace coproto
 
 			for (auto t : types)
 			{
-
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto socks = sched.getSocketPair(t);				
+
+				auto p0 = proto(socks[0], 0);
+				auto p1 = proto(socks[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				//std::cout << sched.mScheds[0].getDot() << std::endl;
 				//std::cout << sched.mScheds[1].getDot() << std::endl;
@@ -200,7 +202,7 @@ namespace coproto
 
 		void coawait_resultSendRecv_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& sock, bool party) -> Proto {
 				std::string str("hello from 0");
 				//co_await Name("main");
 
@@ -209,11 +211,11 @@ namespace coproto
 					if (party)
 					{
 						//std::cout << " p1 sent " << i << std::endl;
-						auto ec = co_await send(str).wrap();
+						auto ec = co_await sock.send(str).wrap();
 						//std::cout << " p1 sent " << i << " ok" << std::endl;
 
 						//std::cout << " p1 recv " << i << std::endl;
-						Result<std::string> r = co_await recv<std::string>().wrap();
+						Result<std::string> r = co_await sock.recv<std::string>().wrap();
 						//std::cout << " p1 recv " << i << " ok " << std::endl;
 
 						if (r.hasError())
@@ -228,7 +230,7 @@ namespace coproto
 					else
 					{
 						//std::cout << " p0 recv " << i << std::endl;
-						co_await recv(str);
+						co_await sock.recv(str);
 						//std::cout << " p0 recv " << i << " ok" << std::endl;
 
 						if (str != "hello from " + std::to_string(i * 2 + 0))
@@ -237,7 +239,7 @@ namespace coproto
 						str.back() += 1;
 
 						//std::cout << " p0 sent " << i << std::endl;
-						co_await send(str);
+						co_await sock.send(str);
 						//std::cout << " p0 sent " << i << " ok" << std::endl;
 
 					}
@@ -247,9 +249,10 @@ namespace coproto
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 
 				if (ec)
@@ -287,7 +290,7 @@ namespace coproto
 
 		void coawait_typedRecv_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& sock, bool party) -> Proto {
 
 				std::vector<u64> buff, rBuff;
 				for (u64 i = 0; i < 5; ++i)
@@ -296,8 +299,8 @@ namespace coproto
 					{
 						buff.resize(1 + i * 2);
 						std::fill(buff.begin(), buff.end(), i * 2);
-						co_await send(std::move(buff));
-						rBuff = co_await recv<std::vector<u64>>();
+						co_await sock.send(std::move(buff));
+						rBuff = co_await sock.recv<std::vector<u64>>();
 
 						buff.resize(2 + i * 2);
 						std::fill(buff.begin(), buff.end(), i * 2 + 1);
@@ -307,7 +310,7 @@ namespace coproto
 					}
 					else
 					{
-						rBuff = co_await recvVec<u64>();
+						rBuff = co_await sock.recvVec<u64>();
 
 						buff.resize(1 + i * 2);
 						std::fill(buff.begin(), buff.end(), i * 2);
@@ -317,7 +320,7 @@ namespace coproto
 
 						buff.resize(buff.size() + 1);
 						std::fill(buff.begin(), buff.end(), i * 2 + 1);
-						co_await send(std::move(buff));
+						co_await sock.send(std::move(buff));
 					}
 				}
 			};
@@ -325,9 +328,11 @@ namespace coproto
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
+
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 
 				if (ec)
@@ -339,18 +344,19 @@ namespace coproto
 
 		void coawait_zeroSendRecv_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 
 				std::vector<u64> buff;
-				co_await send(buff);
+				co_await s.send(buff);
 			};
 
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[0], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (!ec)
 					throw std::runtime_error("");
@@ -360,25 +366,26 @@ namespace coproto
 
 		void coawait_badRecvSize_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 
 				std::vector<u64> buff(3);
 
 				if (party)
 				{
-					co_await send(buff);
+					co_await s.send(buff);
 				}
 				else
 				{
 					buff.resize(1);
-					co_await recv(buff);
+					co_await s.recv(buff);
 				}
 			};
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec != code::badBufferSize)
 					throw std::runtime_error(ec.message());
@@ -388,19 +395,20 @@ namespace coproto
 
 		void coawait_zeroSendRecv_ErrorCode_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 
 				std::vector<u64> buff;
-				auto ec = co_await send(buff).wrap();
+				auto ec = co_await s.send(buff).wrap();
 
 				if (ec != code::sendLengthZeroMsg)
 					throw std::runtime_error("");
 			};
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error("");
@@ -410,16 +418,16 @@ namespace coproto
 
 		void coawait_badRecvSize_ErrorCode_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 
 				std::vector<u64> buff(3);
 
 				if (party)
 				{
-					co_await send(buff).wrap();
+					co_await s.send(buff).wrap();
 
 
-					auto ec = co_await recv(buff).wrap();
+					auto ec = co_await s.recv(buff).wrap();
 					if (ec != code::ioError)
 					{
 						std::cout << ec.message() << std::endl;
@@ -429,12 +437,12 @@ namespace coproto
 				else
 				{
 					buff.resize(1);
-					auto ec = co_await recv(buff).wrap();
+					auto ec = co_await s.recv(buff).wrap();
 
 					if (ec != code::badBufferSize)
 						throw std::runtime_error("");
 
-					ec = co_await recv(buff).wrap();
+					ec = co_await s.recv(buff).wrap();
 					if (ec != code::ioError)
 					{
 						std::cout << ec.message() << std::endl;
@@ -442,7 +450,7 @@ namespace coproto
 					}
 
 
-					ec = co_await send(buff).wrap();
+					ec = co_await s.send(buff).wrap();
 					if (ec != code::ioError)
 					{
 						std::cout << ec.message() << std::endl;
@@ -453,9 +461,10 @@ namespace coproto
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error(ec.message());
@@ -489,37 +498,39 @@ namespace coproto
 
 		void coawait_nestedProtocol_Test()
 		{
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 				std::string str("hello from 0");
 				u64 n = 5;
 				if (party)
 				{
 					//std::cout << "p1 send " << std::endl;
-					auto ec = co_await send(std::move(str)).wrap();
+					auto ec = co_await s.send(std::move(str)).wrap();
 					if (ec)
 						throw std::runtime_error(COPROTO_LOCATION);
 
-					co_await echoServer(n, 10, 1, "p1", false);
+					co_await echoServer(s, n, 10, 1, "p1", false);
 				}
 				else
 				{
 					//std::cout << "p0 recv " << std::endl;
-					co_await recv(str);
+					co_await s.recv(str);
 					//std::cout << " p0 recv" << std::endl;
 
 					if (str != "hello from 0")
 						throw std::runtime_error(COPROTO_LOCATION);
 
-					co_await echoClient(n, 10, 1, "p0", false);
+					co_await echoClient(s, n, 10, 1, "p0", false);
 					//std::cout << " p0 sent" << std::endl;
 
 				}
 			};
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
+
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec)
 					throw std::runtime_error(ec.message());
@@ -527,54 +538,55 @@ namespace coproto
 		}
 
 
-		Proto throwServer(u64 i)
+		Proto throwServer(Socket& s, u64 i)
 		{
-			auto msg = co_await recv<std::string>();
-			co_await send((msg));
+			auto msg = co_await s.recv<std::string>();
+			co_await s.send((msg));
 
 			if (i)
-				co_await throwServer(i - 1);
+				co_await throwServer(s, i - 1);
 			else
 				throw std::runtime_error("");
 		}
 
-		Proto throwClient(u64 i)
+		Proto throwClient(Socket& s, u64 i)
 		{
 			auto msg = std::string("hello world");
-			co_await send(msg);
-			if (msg != co_await recv<std::string>())
+			co_await s.send(msg);
+			if (msg != co_await s.recv<std::string>())
 			{
 				throw std::runtime_error("hello world");
 			}
 
 			if (i)
-				co_await throwClient(i - 1);
+				co_await throwClient(s, i - 1);
 		}
 
 		void coawait_nestedProtocol_Throw_Test()
 		{
 
-			auto proto = [](bool party) -> Proto {
+			auto proto = [](Socket& s, bool party) -> Proto {
 
 				if (party)
 				{
 					std::vector<u64> buff(10);
-					co_await send(buff);
-					co_await throwServer(4);
+					co_await s.send(buff);
+					co_await throwServer(s, 4);
 				}
 				else
 				{
 					std::vector<u64> buff(10);
-					co_await recv(buff);
-					co_await throwClient(4);
+					co_await s.recv(buff);
+					co_await throwClient(s, 4);
 				}
 			};
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (!ec)
 					throw std::runtime_error("");
@@ -586,13 +598,13 @@ namespace coproto
 		{
 			bool hasEc = false;
 			u64 n = 5;
-			auto proto = [&hasEc, n](bool party) -> Proto {
+			auto proto = [&hasEc, n](Socket& s, bool party) -> Proto {
 
 				if (party)
 				{
 					std::vector<u64> buff(10);
-					co_await send(buff);
-					auto ec = co_await throwServer(n).wrap();
+					co_await s.send(buff);
+					auto ec = co_await throwServer(s, n).wrap();
 
 					if (ec == code::uncaughtException)
 						hasEc = true;
@@ -605,17 +617,18 @@ namespace coproto
 				else
 				{
 					std::vector<u64> buff(10);
-					co_await recv(buff);
-					co_await throwClient(n);
+					co_await s.recv(buff);
+					co_await throwClient(s, n);
 				}
 			};
 
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec || !hasEc)
 					throw std::runtime_error("");
@@ -630,7 +643,7 @@ namespace coproto
 			bool print = false;
 			u64 n = 40;
 			u64 rep = 8;
-			auto proto = [n, print, rep](bool party) -> Proto {
+			auto proto = [n, print, rep](Socket& s, bool party) -> Proto {
 
 				if (party)
 				{
@@ -640,19 +653,19 @@ namespace coproto
 
 
 
-					co_await recv(buff);
+					co_await s.recv(buff);
 					co_await EndOfRound();
 
-					auto fu0 = co_await echoServer(n, 5, rep, name, print).async();
+					auto fu0 = co_await echoServer(s, n, 5, rep, name, print).async();
 
 #ifdef MULTI
-					auto fu1 = co_await echoServer(n + 2, 6, rep, name, print).async();
-					auto fu2 = co_await echoServer(n, 7, rep, name, print).async();
-					auto fu3 = co_await echoServer(n + 7, 8, rep, name, print).async();
-					auto fu4 = co_await echoServer(n, 9, rep, name, print).async();
+					auto fu1 = co_await echoServer(s, n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoServer(s, n, 7, rep, name, print).async();
+					auto fu3 = co_await echoServer(s, n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoServer(s, n, 9, rep, name, print).async();
 #endif
 
-					co_await echoClient(n, 10, rep, name, print);
+					co_await echoClient(s, n, 10, rep, name, print);
 					//co_await send(buff);
 
 					co_await fu0;
@@ -668,16 +681,16 @@ namespace coproto
 					auto name = std::string("p0");
 					co_await Name(name);
 					std::vector<u64> buff(10);
-					co_await send(buff);
+					co_await s.send(buff);
 					//co_await recv(buff);
-					auto fu0 = co_await echoClient(n, 5, rep, name, print).async();
+					auto fu0 = co_await echoClient(s, n, 5, rep, name, print).async();
 #ifdef MULTI
-					auto fu1 = co_await echoClient(n + 2, 6, rep, name, print).async();
-					auto fu2 = co_await echoClient(n, 7, rep, name, print).async();
-					auto fu3 = co_await echoClient(n + 7, 8, rep, name, print).async();
-					auto fu4 = co_await echoClient(n, 9, rep, name, print).async();
+					auto fu1 = co_await echoClient(s, n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoClient(s, n, 7, rep, name, print).async();
+					auto fu3 = co_await echoClient(s, n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoClient(s, n, 9, rep, name, print).async();
 #endif
-					co_await echoServer(n, 10, rep, name, print);
+					co_await echoServer(s, n, 10, rep, name, print);
 					//co_await recv(buff);
 
 					co_await fu0;
@@ -695,9 +708,10 @@ namespace coproto
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				//sched.mScheds[0].mPrint = true;
 				//sched.mScheds[1].mPrint = true;
 
@@ -719,14 +733,14 @@ namespace coproto
 		void coawait_asyncProtocol_Throw_Test()
 		{
 			u64 n = 3;
-			auto proto = [n](bool party) -> Proto {
+			auto proto = [n](Socket& s, bool party) -> Proto {
 
 				if (party)
 				{
 					std::vector<u64> buff(10);
-					co_await send(buff);
+					co_await s.send(buff);
 
-					auto token = co_await throwServer(n).async();
+					auto token = co_await throwServer(s, n).async();
 					//co_await send(buff);
 
 					co_await token;
@@ -734,8 +748,8 @@ namespace coproto
 				else
 				{
 					std::vector<u64> buff(10);
-					co_await recv(buff);
-					auto fu = co_await throwClient(n).async();
+					co_await s.recv(buff);
+					auto fu = co_await throwClient(s, n).async();
 					//co_await recv(buff);
 
 					co_await fu;
@@ -746,9 +760,10 @@ namespace coproto
 
 			for (auto t : types)
 			{
-				auto p0 = proto(0);
-				auto p1 = proto(1);
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = sched.execute(p0, p1, t);
 				if (ec != code::uncaughtException)
 					throw std::runtime_error("");
@@ -759,36 +774,39 @@ namespace coproto
 		void coawait_endOfRound_Test()
 		{
 
-			auto recvProto = [&]() -> Proto {
+			auto recvProto = [&](Socket& s) -> Proto {
 				std::vector<u8> msg(10);
-				co_await recv(msg);
+				co_await s.recv(msg);
 				co_await EndOfRound();
-				co_await send(msg);
+				co_await s.send(msg);
 			};
-			auto sendProto = [&]() -> Proto {
+			auto sendProto = [&](Socket& s) -> Proto {
 				std::vector<u8> msg(10);
-				co_await send(msg);
+				co_await s.send(msg);
 				co_await EndOfRound();
-				co_await recv(msg);
+				co_await s.recv(msg);
 			};
 
-			auto recvProto2 = [&]() -> Proto {
+			auto recvProto2 = [&](Socket& s) -> Proto {
 				std::vector<u8> msg(10);
-				co_await recvProto();
-				co_await send(msg);
+				co_await recvProto(s);
+				co_await s.send(msg);
 			};
-			auto sendProto2 = [&]() -> Proto {
+			auto sendProto2 = [&](Socket& s) -> Proto {
 				std::vector<u8> msg(10);
-				co_await sendProto();
-				co_await recv(msg);
+				co_await sendProto(s);
+				co_await s.recv(msg);
 			};
 
 
 			for (auto t : types)
 			{
-				auto p0 = sendProto2();
-				auto p1 = recvProto2();
+
 				LocalEvaluator sched;
+				auto s = sched.getSocketPair(t);
+				auto p0 = sendProto2(s[0]);
+				auto p1 = recvProto2(s[1]);
+
 				auto ec = sched.execute(p0, p1, t);
 
 
@@ -810,7 +828,7 @@ namespace coproto
 			bool print = false;
 			u64 n = 3;
 			u64 rep = 2;
-			auto proto = [n, print, rep](bool party) -> Proto {
+			auto proto = [n, print, rep](Socket& s, bool party) -> Proto {
 
 				if (party)
 				{
@@ -820,19 +838,19 @@ namespace coproto
 
 
 
-					co_await recv(buff);
+					co_await s.recv(buff);
 					co_await EndOfRound();
 
-					auto fu0 = co_await echoServer(n, 5, rep, name, print).async();
+					auto fu0 = co_await echoServer(s, n, 5, rep, name, print).async();
 
 #ifdef MULTI
-					auto fu1 = co_await echoServer(n + 2, 6, rep, name, print).async();
-					auto fu2 = co_await echoServer(n, 7, rep, name, print).async();
-					auto fu3 = co_await echoServer(n + 7, 8, rep, name, print).async();
-					auto fu4 = co_await echoServer(n, 9, rep, name, print).async();
+					auto fu1 = co_await echoServer(s, n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoServer(s, n, 7, rep, name, print).async();
+					auto fu3 = co_await echoServer(s, n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoServer(s, n, 9, rep, name, print).async();
 #endif
 
-					co_await echoClient(n, 10, rep, name, print);
+					co_await echoClient(s, n, 10, rep, name, print);
 					//co_await send(buff);
 
 					co_await fu0;
@@ -848,16 +866,16 @@ namespace coproto
 					auto name = std::string("p0");
 					co_await Name(name);
 					std::vector<u64> buff(10);
-					co_await send(buff);
+					co_await s.send(buff);
 					//co_await recv(buff);
-					auto fu0 = co_await echoClient(n, 5, rep, name, print).async();
+					auto fu0 = co_await echoClient(s, n, 5, rep, name, print).async();
 #ifdef MULTI
-					auto fu1 = co_await echoClient(n + 2, 6, rep, name, print).async();
-					auto fu2 = co_await echoClient(n, 7, rep, name, print).async();
-					auto fu3 = co_await echoClient(n + 7, 8, rep, name, print).async();
-					auto fu4 = co_await echoClient(n, 9, rep, name, print).async();
+					auto fu1 = co_await echoClient(s, n + 2, 6, rep, name, print).async();
+					auto fu2 = co_await echoClient(s, n, 7, rep, name, print).async();
+					auto fu3 = co_await echoClient(s, n + 7, 8, rep, name, print).async();
+					auto fu4 = co_await echoClient(s, n, 9, rep, name, print).async();
 #endif
-					co_await echoServer(n, 10, rep, name, print);
+					co_await echoServer(s, n, 10, rep, name, print);
 					//co_await recv(buff);
 
 					co_await fu0;
@@ -877,8 +895,9 @@ namespace coproto
 			{
 
 				LocalEvaluator eval;
-				auto p0 = proto(0);
-				auto p1 = proto(1);
+				auto s = eval.getSocketPair(type);
+				auto p0 = proto(s[0], 0);
+				auto p1 = proto(s[1], 1);
 				auto ec = eval.execute(p0, p1, type);
 				auto numOps = eval.mOpIdx;
 
@@ -887,10 +906,11 @@ namespace coproto
 
 				for (u64 i = 0; i < numOps; ++i)
 				{
-					auto p0 = proto(0);
-					auto p1 = proto(1);
-
 					LocalEvaluator eval;
+					auto s = eval.getSocketPair(type);
+					auto p0 = proto(s[0], 0);
+					auto p1 = proto(s[1], 1);
+
 					eval.mErrorIdx = i;
 					auto ec = eval.execute(p0, p1, type);
 

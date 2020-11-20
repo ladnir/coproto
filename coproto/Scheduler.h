@@ -12,6 +12,9 @@
 
 namespace coproto
 {
+#ifdef COPROTO_LOGGING
+	extern u64 gProtoIdx;
+#endif
 
 	struct Continutation
 	{
@@ -21,9 +24,9 @@ namespace coproto
 		Continutation(const Continutation&) = delete;
 		Continutation(Continutation&&) = default;
 
-		template<typename Fn, typename Enable_If = 
+		template<typename Fn, typename Enable_If =
 			enable_if_t<std::is_constructible<Func, Fn&&>::value>>
-		Continutation(Fn&& fn)
+			Continutation(Fn&& fn)
 			: mFn(std::forward<Fn>(fn))
 		{}
 
@@ -41,10 +44,6 @@ namespace coproto
 	};
 
 
-#ifdef COPROTO_LOGGING
-	extern u64 gProtoIdx;
-#endif
-
 	struct AsyncSocket
 	{
 		virtual void recv(span<u8> data, Continutation&& cont) = 0;
@@ -52,12 +51,16 @@ namespace coproto
 		virtual void cancel() = 0;
 	};
 
-	struct Socket
+	struct SyncSocket
 	{
 		virtual error_code recv(span<u8> data) = 0;
 		virtual error_code send(span<u8> data) = 0;
 		virtual void cancel() = 0;
 	};
+
+
+
+
 
 
 	class Work
@@ -165,50 +168,26 @@ namespace coproto
 
 
 
-	class Scheduler
+	struct SockScheduler
 	{
-	public:
-		std::list<Resumable*> mReady;
+		SockScheduler(AsyncSocket& s) : mAsync(&s) {}
+		SockScheduler(SyncSocket& s) : mSync(&s) {}
+
+		AsyncSocket* mAsync = nullptr;
+		SyncSocket* mSync = nullptr;
 
 		std::unordered_map<u32, std::tuple<RecvBuffer*, Resumable*>> mRecvBuffers;
 
+		Scheduler* mSched = nullptr;
 		std::list<std::tuple<SendBuffer, u32, Resumable*>> mSendBuffers;
-
-		std::vector<Resumable*> mStack;
-
-		Socket* mSock = nullptr;
-		AsyncSocket* mASock = nullptr;
-		Executor* mExecutor = nullptr;
-		Work mWork;
-
-		std::function<void(error_code)> mCont;
-
-
-		u64 mRoundIdx = 0;
-		bool mPrint = false, mLogging = false;
-		bool mRunning = false, mSentHeader = false;
 		u32 mNextSlot = 1;
-		bool mHaveHeader = false, mActiveRecv = false, mActiveSend = false;
-		//bool mSuspend;
+		bool
+			mSentHeader = false,
+			mHaveHeader = false,
+			mActiveRecv = false,
+			mActiveSend = false;
 
 
-		void run();
-		bool done();
-
-		template<typename Fn>
-		inline enable_if_t<std::is_constructible<std::function<void()>, Fn>::value>
-			 dispatch(Fn&& fn)
-		{
-			if (mExecutor)
-				mExecutor->dispatch(std::forward<Fn>(fn));
-			else
-				fn();
-		}
-
-
-
-
-		error_code resume(Resumable* proto);
 		void initAsyncRecv();
 		void initRecv();
 
@@ -241,11 +220,47 @@ namespace coproto
 
 		error_code recvHeader();
 
-		void recv(RecvBuffer* data, u32 slot, Resumable* res);
-		void send_(SendBuffer&& op, u32 slot, Resumable* res);
+		void recv(Scheduler& sched, RecvBuffer* data, u32 slot, Resumable* res);
+		void send_(Scheduler& sched, SendBuffer&& op, u32 slot, Resumable* res);
 
 		void cancelRecvQueue(error_code ec);
 		void cancelSendQueue(error_code ec);
+
+	};
+
+
+	class Scheduler
+	{
+	public:
+		std::list<Resumable*> mReady;
+		std::vector<SockScheduler*> mSockets;
+		std::vector<Resumable*> mStack;
+
+		Executor* mExecutor = nullptr;
+		Work mWork;
+
+		std::function<void(error_code)> mCont;
+
+
+		u64 mRoundIdx = 0;
+		bool mPrint = false, mLogging = false;
+		bool mRunning = false;
+		u32 mNextSlot = 1;
+
+		void run();
+		bool done();
+
+		template<typename Fn>
+		inline enable_if_t<std::is_constructible<std::function<void()>, Fn>::value>
+			 dispatch(Fn&& fn)
+		{
+			if (mExecutor)
+				mExecutor->dispatch(std::forward<Fn>(fn));
+			else
+				fn();
+		}
+
+		error_code resume(Resumable* proto);
 
 		void scheduleReady(Resumable& proto);
 
@@ -255,12 +270,10 @@ namespace coproto
 
 		void clear();
 
-
 		u64 numRounds()
 		{
 			return mRoundIdx;
 		}
-
 
 
 

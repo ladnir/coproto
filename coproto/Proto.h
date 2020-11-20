@@ -31,7 +31,7 @@ namespace coproto
 		{
 			std::unique_ptr<Scheduler> mSched;
 
-			error_code evaluate(Socket& sock, bool print)
+			error_code evaluate(bool print)
 			{
 				if (mSched == nullptr)
 				{
@@ -40,7 +40,7 @@ namespace coproto
 					get()->mSlotIdx = 0;
 				}
 
-				mSched->mSock = &sock;
+				//mSched->mSock = &sock;
 				mSched->mPrint = print;
 
 				mSched->run();
@@ -51,14 +51,14 @@ namespace coproto
 					return code::suspend;
 			}
 
-			void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex, bool print)
+			void evaluate(std::function<void(error_code)>&& cont, Executor& ex, bool print)
 			{
 				assert(mSched == nullptr);
 				mSched = make_unique<Scheduler>();
 				mSched->scheduleReady(*get());
 				get()->mSlotIdx = 0;
 
-				mSched->mASock = &sock;
+				//mSched->mASock = &sock;
 				mSched->mExecutor = &ex;
 				mSched->mCont = std::move(cont);
 				mSched->mWork = ex.getWork();
@@ -127,14 +127,14 @@ namespace coproto
 #endif
 		}
 
-		error_code evaluate(Socket& sock)
+		error_code evaluate()
 		{
-			return mBase.evaluate(sock, false);
+			return mBase.evaluate(false);
 		}
 
-		void evaluate(AsyncSocket& sock, std::function<void(error_code)>&& cont, Executor& ex)
+		void evaluate(std::function<void(error_code)>&& cont, Executor& ex)
 		{
-			mBase.evaluate(sock, std::move(cont), ex, false);
+			mBase.evaluate(std::move(cont), ex, false);
 
 		}
 

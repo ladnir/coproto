@@ -134,7 +134,7 @@ namespace coproto
 
 				if (!p0->done())
 				{
-					auto ec = p0.evaluate(mSocks[0], print);
+					auto ec = p0.evaluate(print);
 
 					sendMsgs(0, ec);
 
@@ -143,7 +143,7 @@ namespace coproto
 				}
 				if (!p1->done())
 				{
-					auto ec = p1.evaluate(mSocks[1], print);
+					auto ec = p1.evaluate(print);
 
 					sendMsgs(1, ec);
 					if (print)
@@ -155,10 +155,10 @@ namespace coproto
 		else if (type == Type::blocking)
 		{
 			auto thrd = std::thread([&]() {
-				p0.evaluate(mBlkSocks[0], print);
+				p0.evaluate(print);
 				});
 
-			p1.evaluate(mBlkSocks[1], print);
+			p1.evaluate(print);
 
 			thrd.join();
 
@@ -172,8 +172,8 @@ namespace coproto
 			auto cc = [&](error_code ec) {
 			};
 
-			p0.evaluate(mAsyncSock[0], cc, ex, print);
-			p1.evaluate(mAsyncSock[1], cc, ex, print);
+			p0.evaluate(cc, ex, print);
+			p1.evaluate(cc, ex, print);
 
 			ex.run();
 
@@ -188,8 +188,8 @@ namespace coproto
 			auto cc = [&](error_code ec) {
 			};
 
-			p0.evaluate(mAsyncSock[0], cc, ex, print);
-			p1.evaluate(mAsyncSock[1], cc, ex, print);
+			p0.evaluate(cc, ex, print);
+			p1.evaluate(cc, ex, print);
 									   
 			ex.run();
 			mSocketWorker.join();

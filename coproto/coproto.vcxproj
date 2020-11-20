@@ -170,6 +170,7 @@
     <ClInclude Include="Scheduler.h" />
     <ClInclude Include="Proto.h" />
     <ClInclude Include="InlineVector.h" />
+    <ClInclude Include="Socket.h" />
     <ClInclude Include="span.h" />
     <ClInclude Include="Tests.h" />
     <ClInclude Include="TypeTraits.h" />
@@ -185,6 +186,7 @@
     <ClCompile Include="Resumable.cpp" />
     <ClCompile Include="Scheduler.cpp" />
     <ClCompile Include="InlineVector.cpp" />
+    <ClCompile Include="Socket.cpp" />
     <ClCompile Include="Tests.cpp" />
     <ClCompile Include="TypeTraits.cpp" />
   </ItemGroup>

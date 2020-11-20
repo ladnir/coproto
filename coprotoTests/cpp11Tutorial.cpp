@@ -8,7 +8,7 @@
 using namespace coproto;
 namespace {
 
-	Proto echoClient(std::string message)
+	Proto echoClient(std::string message, Socket& socket)
 	{
 		// we have to implement each protocol
 		// as a custom struct which inherits
@@ -17,8 +17,10 @@ namespace {
 		{
 			// capture the parameters in the constructor.
 			std::string message;
-			Impl(std::string& s)
-				:message(s)
+			Socket& socket;
+			Impl(std::string& s, Socket& sock)
+				: message(s)
+				, socket(sock)
 			{}
 
 			// implement the protocol.
@@ -34,11 +36,11 @@ namespace {
 				// we will use the CP_AWAIT macro to acheive a similar
 				// result. This will pause the funcation at this point
 				// until the operation has completed.
-				CP_AWAIT(send(message.size()));
-				CP_AWAIT(send(message));
+				CP_AWAIT(socket.send(message.size()));
+				CP_AWAIT(socket.send(message));
 
 				// wait for the server to respond.
-				CP_AWAIT(recv(message));
+				CP_AWAIT(socket.recv(message));
 				std::cout << "echo client received: " << message << std::endl;
 
 				// finally, we end the coroutine with CP_END
@@ -49,10 +51,10 @@ namespace {
 		};
 
 		// construct an instance of this protocol and return it.
-		return makeProto<Impl>(message);
+		return makeProto<Impl>(message, socket);
 	}
 
-	Proto echoServer()
+	Proto echoServer(Socket&s)
 	{
 		struct Impl : public NativeProto
 		{
@@ -61,57 +63,64 @@ namespace {
 			// be stored as a member variable.
 			size_t size;
 			std::string message;
+			Socket& socket;
+			
+			Impl(Socket& sock) : socket(sock) {}
 
 			error_code resume() override
 			{
 				CP_BEGIN();
 
-				CP_AWAIT(recv(size));
+				CP_AWAIT(socket.recv(size));
 
 				message.resize(size);
 
 				// the size of the received message must match.
 				// if not as error will occur.
-				CP_AWAIT(recv(message));
+				CP_AWAIT(socket.recv(message));
 
 				std::cout << "echo server received: " << message << std::endl;
 
 				// send the result back.
-				CP_AWAIT(send(message));
+				CP_AWAIT(socket.send(message));
 
 				CP_END();
 				return{};
 			}
 		};
-		return makeProto<Impl>();
+		return makeProto<Impl>(s);
 	}
 
 	void echoExample()
 	{
 		std::cout << Color::Green << " ----------- echoExample 11 ----------- " << std::endl << Color::Default;
+		LocalEvaluator eval;
+		auto sockets = eval.getSocketPair();
+
 		// coproto is lazy in that when you 
 		// construct a protocol nothing actually 
 		// happens apart from caputuring the 
 		// arguments.
-		auto server = echoServer();
-		auto client = echoClient("hello world");
+		auto server = echoServer(sockets[0]);
+		auto client = echoClient("hello world", sockets[1]);
 
 		// to actually execute the protocol,
 		// the user must invoke them in some way.
 		// One easy way is with LocalEvaluator
 		// which will runs both sides of the protocol.
-		LocalEvaluator eval;
 		eval.execute(server, client);
 	}
 
 
-	Proto macroClient(std::string message)
+	Proto macroClient(std::string message, Socket& socket)
 	{
 		struct Impl : NativeProto
 		{
 			std::string message;
-			Impl(std::string& s)
+			Socket& socket;
+			Impl(std::string& s, Socket& sock)
 				:message(s)
+				,socket(sock)
 			{}
 
 			error_code resume() override
@@ -129,7 +138,7 @@ namespace {
 					// the statement CP_AWAIT(send(message.size()));
 					// effectively expands to the following
 					{
-						Proto proto = send(message.size());
+						Proto proto = socket.send(message.size());
 						error_code ec = this->await(std::move(proto));
 						if (ec)
 						{
@@ -167,8 +176,8 @@ namespace {
 					// called or canceled depending on how they are configured.
 
 					// we will not expand the next calls since they are the same.
-					CP_AWAIT(send(message));
-					CP_AWAIT(recv(message));
+					CP_AWAIT(socket.send(message));
+					CP_AWAIT(socket.recv(message));
 
 					// finally, the CP_END(); closes the switch statement.
 				default:
@@ -179,17 +188,18 @@ namespace {
 		};
 
 		// construct an instance of this protocol and return it.
-		return makeProto<Impl>(message);
+		return makeProto<Impl>(message, socket);
 	}
 
 	void macroExample()
 	{
 		std::cout << Color::Green << " ----------- macroExample 11 ----------- " << std::endl << Color::Default;
-
-		auto server = echoServer();
-		auto client = macroClient("hello world");
-
 		LocalEvaluator eval;
+		auto sockets = eval.getSocketPair();
+
+		auto server = echoServer(sockets[0]);
+		auto client = macroClient("hello world", sockets[1]);
+
 		eval.execute(server, client);
 	}
 

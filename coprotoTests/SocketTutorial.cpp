@@ -57,7 +57,7 @@ namespace {
 	// interface. Your task will be to implement these methods
 	// in terms of your socket type as opposed to emulating it
 	// as ive done here.
-	struct MyBlockingSocket : public Socket
+	struct MyBlockingSocket : public SyncSocket
 	{
 
 		// We will take a pointer to the other socket.
@@ -145,18 +145,22 @@ namespace {
 		// Lets create two of these sockets which are 
 		// connected to eachother.
 
-		MyBlockingSocket sock0;
-		MyBlockingSocket sock1;
+		MyBlockingSocket mySock0;
+		MyBlockingSocket mySock1;
 
 		// connect them.
-		sock0.mOther = &sock1;
-		sock1.mOther = &sock0;
+		mySock0.mOther = &mySock1;
+		mySock1.mOther = &mySock0;
+
+		// wrap thse sockets
+		auto sock0 = Socket(mySock0);
+		auto sock1 = Socket(mySock1);
 
 		// These sockets are then ready to use.
 
 		// Lets create a protocol pair to evaluate.
-		Proto client = examples::echoClient("hello world");
-		Proto server = examples::echoServer();
+		Proto client = examples::echoClient("hello world", sock0);
+		Proto server = examples::echoServer(sock1);
 
 		// now we need to invoke the protocols on 
 		// the provided sockets. Sinces these sockets
@@ -167,13 +171,13 @@ namespace {
 
 			// we invoke the protocol by calling evaluate
 			// with the desired socket.
-			error_code ec = client.evaluate(sock0);
+			error_code ec = client.evaluate();
 			if (ec)
 				std::cout << "client failed: " << ec.message() << std::endl;
 			});
 
 		// invoke the server with the other socket.
-		error_code ec = server.evaluate(sock1);
+		error_code ec = server.evaluate();
 		if (ec)
 			std::cout << "server failed: " << ec.message() << std::endl;
 
@@ -202,7 +206,7 @@ namespace {
 	// they might need to suspend the protocol half way through 
 	// evaluating it in order to perform some other operations, e.g.
 	// return to java or python and actually send the data.
-	struct MyNonblockingSocket : Socket
+	struct MyNonblockingSocket : SyncSocket
 	{
 		MyNonblockingSocket* mOther = nullptr;
 		error_code mErrorStatus = {};
@@ -258,16 +262,20 @@ namespace {
 	{
 		std::cout << Color::Green << " ----------- non blocking Socket Example ----------- " << std::endl << Color::Default;
 
-		MyNonblockingSocket sock0;
-		MyNonblockingSocket sock1;
-		sock0.mOther = &sock1;
-		sock1.mOther = &sock0;
+		MyNonblockingSocket mySock0;
+		MyNonblockingSocket mySock1;
+		mySock0.mOther = &mySock1;
+		mySock1.mOther = &mySock0;
+
+		// wrap thse sockets
+		auto sock0 = Socket(mySock0);
+		auto sock1 = Socket(mySock1);
 
 		// These sockets are then ready to use.
 
 		// Lets create a protocol pair to evaluate.
-		Proto client = examples::echoClient("hello world");
-		Proto server = examples::echoServer();
+		Proto client = examples::echoClient("hello world", sock0);
+		Proto server = examples::echoServer(sock1);
 
 		// now, since our sockets dont block we do
 		// not need to create a thread. Instead we
@@ -283,9 +291,9 @@ namespace {
 			serverEC == code::suspend)
 		{
 			if (clientEC == code::suspend)
-				clientEC = client.evaluate(sock0);
+				clientEC = client.evaluate();
 			if (serverEC == code::suspend)
-				serverEC = server.evaluate(sock1);
+				serverEC = server.evaluate();
 		}
 
 		// we can now check if either failed.
@@ -341,22 +349,26 @@ namespace {
 		// by the LocalEvaluator.
 		using ASocket = LocalEvaluator::AsyncSock;
 
-		ASocket sock0;
-		ASocket sock1;
+		ASocket mySock0;
+		ASocket mySock1;
 
 		// setup the async sockets. ioWorker stores state for the
 		// various async operations.
 		ASocket::Worker ioWorker;
-		sock0.mIdx = 0;
-		sock1.mIdx = 1;
-		sock0.mWorker = &ioWorker;
-		sock1.mWorker = &ioWorker;
+		mySock0.mIdx = 0;
+		mySock1.mIdx = 1;
+		mySock0.mWorker = &ioWorker;
+		mySock1.mWorker = &ioWorker;
+
+		// wrap thse sockets
+		auto sock0 = Socket(mySock0);
+		auto sock1 = Socket(mySock1);
 
 		// These sockets are then ready to use.
 
 		// Lets create a protocol pair to evaluate.
-		Proto client = examples::echoClient("hello world");
-		Proto server = examples::echoServer();
+		Proto client = examples::echoClient("hello world", sock0);
+		Proto server = examples::echoServer(sock1);
 
 		// One addition parameter async sockets requires is an executor.
 		// An executor controls where the protocol is computed. Since
@@ -370,13 +382,13 @@ namespace {
 		// methods of acheiving a similar result such as boost::asio::strand.
 		ThreadExecutor executor;
 
-		client.evaluate(sock0, [&](error_code ec) {
+		client.evaluate([&](error_code ec) {
 			// when the async protocol completes, this function will be called
 			std::cout << "client finished with ec = " << ec.message() << std::endl;
 
 			}, executor);
 
-		server.evaluate(sock1, [&](error_code ec) {
+		server.evaluate([&](error_code ec) {
 			// when the async protocol completes, this function will be called
 			std::cout << "server finished with ec = " << ec.message() << std::endl;
 

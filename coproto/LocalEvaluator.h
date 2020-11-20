@@ -2,7 +2,7 @@
 #include "coproto/Scheduler.h"
 #include "coproto/Proto.h"
 #include <cassert>
-
+#include "coproto/Socket.h"
 
 #include "coproto/Queue.h"
 #include <iostream>
@@ -23,7 +23,7 @@ namespace coproto
 			asyncThread
 		};
 
-		struct InterlaceSock : public Socket
+		struct InterlaceSock : public SyncSocket
 		{
 			std::list<std::vector<u8>> mInbound, mOutbound;
 			bool mCanceled = false;
@@ -43,7 +43,7 @@ namespace coproto
 		};
 
 
-		struct BlockingSock : public Socket
+		struct BlockingSock : public SyncSocket
 		{
 			BlockingSock() = default;
 			BlockingSock(BlockingSock&& o)
@@ -214,16 +214,37 @@ namespace coproto
 		std::array<AsyncSock, 2> mAsyncSock;
 		AsyncSock::Worker mSocketWorker;;
 
-
-		std::array<BlockingSock, 2> getSocketPair()
+		std::array<Socket, 2> getSocketPair(Type t)
 		{
-			std::array<BlockingSock, 2> bb;
-			bb[0].mEval = this;
-			bb[1].mEval = this;
-			bb[0].mOther = &bb[1];
-			bb[1].mOther = &bb[0];
+			std::array<Socket, 2> s;
+			switch (t)
+			{
+			case coproto::LocalEvaluator::interlace:
+				s[0] = mSocks[0];
+				s[1] = mSocks[1];
+				break;
+			case coproto::LocalEvaluator::blocking:
+				s[0] = mBlkSocks[0];
+				s[1] = mBlkSocks[1];
+				break;
+			case coproto::LocalEvaluator::async:
+				s[0] = mAsyncSock[0];
+				s[1] = mAsyncSock[1];
+				break;
+			case coproto::LocalEvaluator::asyncThread:
+				s[0] = mAsyncSock[0];
+				s[1] = mAsyncSock[1];
+				break;
+			default:
+				assert(0);
+				break;
+			}
+			return s;
+		}
 
-			return bb;
+		std::array<Socket, 2> getSocketPair()
+		{
+			return getSocketPair(Type::interlace);
 		}
 		//std::array<Scheduler, 2> mScheds;
 

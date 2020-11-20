@@ -36,10 +36,10 @@ COPROTO_FALLTHROUGH;case __LINE__:			\
 res = std::move(*(typename decltype(X)::return_type*)(this->getAwaitReturn()));\
 }while(0)
 
-#define CP_SEND(X) CP_AWAIT(::coproto::send(X))
-#define CP_RECV(X) CP_AWAIT(::coproto::recv(X))
-#define CP_SEND_EC(res,X) CP_AWAIT_VAL(res, ::coproto::send(X).wrap())
-#define CP_RECV_EC(res,X) CP_AWAIT_VAL(res, ::coproto::recv(X).wrap())
+#define CP_SEND(s, X) CP_AWAIT(s.send(X))
+#define CP_RECV(s, X) CP_AWAIT(s.recv(X))
+#define CP_SEND_EC(res,s, X) CP_AWAIT_VAL(res, s.send(X).wrap())
+#define CP_RECV_EC(res,s, X) CP_AWAIT_VAL(res, s.recv(X).wrap())
 #define CP_END_OF_ROUND() CP_AWAIT(::coproto::EndOfRound{})		
 
 #define CP_BEGIN()					\
