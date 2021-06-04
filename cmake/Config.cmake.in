@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/coprotoTargets.cmake")
+
+# compile the library with c++20 support
+set(COPROTO_CPP20 @COPROTO_CPP20@)
+set(coproto_CPP20 @COPROTO_CPP20@)
+
+# compile the library logging support
+set(COPROTO_LOGGING @COPROTO_LOGGING@) 
+set(coproto_LOGGING @COPROTO_LOGGING@) 
+
+include("${CMAKE_CURRENT_LIST_DIR}/coprotoFindDeps.cmake")

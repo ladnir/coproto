@@ -5,6 +5,8 @@
 x64/
 out/
 *.args.json
+*.log
+cmake/testProject/build
 
 Makefile
 CMakeFiles/

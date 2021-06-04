@@ -1,6 +1,6 @@
 #pragma once
 
-#include "config.h"
+#include "coproto/config.h"
 #include <cstdint>
 //#include <string>
 

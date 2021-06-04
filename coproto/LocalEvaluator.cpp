@@ -9,7 +9,7 @@ namespace coproto
 	error_code LocalEvaluator::InterlaceSock::recv(span<u8> data)
 	{
 		if (mCanceled)
-			return code::ioError;
+			return code::ioError; 
 
 		error_code ec;
 		if (mEval)
