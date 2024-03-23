@@ -8,7 +8,8 @@ message(STATUS "Option: COPROTO_FETCH_AUTO      = ${COPROTO_FETCH_AUTO}\t  ~ aut
 message(STATUS "Option: COPROTO_FETCH_SPAN      = ${COPROTO_FETCH_SPAN}\t  ~ always fetch span")
 message(STATUS "Option: COPROTO_FETCH_FUNCTION2 = ${COPROTO_FETCH_FUNCTION2}\t  ~ always fetch function2")
 message(STATUS "Option: COPROTO_FETCH_MACORO    = ${COPROTO_FETCH_MACORO}\t  ~ always fetch macoro")
-message(STATUS "Option: COPROTO_FETCH_BOOST     = ${COPROTO_FETCH_BOOST}\t  ~ always fetch boost\n")
+message(STATUS "Option: COPROTO_FETCH_BOOST     = ${COPROTO_FETCH_BOOST}\t  ~ always fetch boost")
+message(STATUS "Option: COPROTO_FETCH_QUIC      = ${COPROTO_FETCH_QUIC}\t  ~ always fetch quic\n")
 
 
 if(NOT DEFINED COPROTO_CPP_VER)
@@ -26,6 +27,7 @@ option(COPROTO_ENABLE_ASSERTS "compile the library with asserts enabled" ON)
 message(STATUS "Option: COPROTO_CPP_VER         = ${COPROTO_CPP_VER}")
 message(STATUS "Option: COPROTO_PIC             = ${COPROTO_PIC}")
 message(STATUS "Option: COPROTO_ASAN            = ${COPROTO_ASAN}")
+message(STATUS "Option: COPROTO_ENABLE_MSQUIC   = ${COPROTO_ENABLE_MSQUIC}")
 message(STATUS "Option: COPROTO_ENABLE_BOOST    = ${COPROTO_ENABLE_BOOST}")
 message(STATUS "Option: COPROTO_ENABLE_SPAN     = ${COPROTO_ENABLE_SPAN}")
 message(STATUS "Option: COPROTO_ENABLE_OPENSSL  = ${COPROTO_ENABLE_OPENSSL}")

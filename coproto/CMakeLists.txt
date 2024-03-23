@@ -73,6 +73,10 @@ if(COPROTO_ASAN)
     endif()
 endif()
 
+if(COPROTO_ENABLE_MSQUIC)
+    target_link_libraries(coproto msquic)
+endif()
+
 target_link_libraries(coproto function2::function2)
 target_link_libraries(coproto macoro::macoro)
 configure_file(config.h.in "config.h" )

@@ -182,6 +182,45 @@ if(COPROTO_ENABLE_OPENSSL)
 endif()
 
 
+## MSQUIC
+###########################################################################
+
+
+if(COPROTO_ENABLE_MSQUIC)
+
+    macro(FIND_MSQUIC)
+        set(ARGS ${ARGN})
+        if(COPROTO_FETCH_MSQUIC)
+            list(APPEND ARGS NO_DEFAULT_PATH  PATHS ${COPROTO_STAGE} )
+        elseif(${COPROTO_NO_SYSTEM_PATH})
+            list(APPEND ARGS NO_DEFAULT_PATH PATHS ${CMAKE_PREFIX_PATH})
+        endif()
+        find_package(msquic ${ARGS} ${COPROTO_FIND_PACKAGE_OPTIONS}
+            PATHS "C:/Users/peter/repo/coproto/out/install/x64-Debug/share/msquic")
+    endmacro()
+
+    
+    if((COPROTO_FETCH_AUTO OR COPROTO_FETCH_MSQUIC) AND COPROTO_BUILD)
+        if(NOT COPROTO_FETCH_QUIC)
+            FIND_MSQUIC(QUIET)
+        endif()
+        
+        if(NOT msquic_FOUND)
+            include("${CMAKE_CURRENT_LIST_DIR}/../thirdparty/getMsQuic.cmake")
+        endif()
+    endif()
+
+
+    FIND_MSQUIC(REQUIRED)
+
+    if(NOT msquic_FOUND)
+        message(FATAL_ERROR "Failed to find msquic. When building coproto, add -DCOPROTO_FETCH_QUIC=ON or -DCOPROTO_FETCH_AUTO=ON to auto download.")
+    endif()
+
+    #message(STATUS "\n\nmsquic_LIB: ${MSQUIC_LIBRARIES}" )
+    #message(STATUS "MSQUIC_INC: ${MSQUIC_INCLUDE_DIR}\n\n" )
+endif()
+
 
 # resort the previous prefix path
 set(CMAKE_PREFIX_PATH ${PUSHED_CMAKE_PREFIX_PATH})
