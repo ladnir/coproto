@@ -32,11 +32,11 @@
 #include <cstring>
 
 #ifdef COPROTO_SOCK_LOGGING
-#define RECV_LOG(X) if(mLogging) mRecvLog.push_back(X)
-#define SEND_LOG(X) if(mLogging) mSendLog.push_back(X)
+#define RECV_LOG(X, S, M) if(mLogging) mRecvLog.push_back(SockScheduler::LogEntry{X, S, M});
+#define SEND_LOG(X, S, M) if(mLogging) mSendLog.push_back(SockScheduler::LogEntry{X, S, M});
 #else
-#define RECV_LOG(X)
-#define SEND_LOG(X)
+#define RECV_LOG(X, S, M)
+#define SEND_LOG(X, S, M)
 #endif
 
 namespace coproto
@@ -424,7 +424,19 @@ namespace coproto
 			template<typename Sock>
 			macoro::task<> makeSendTask(Sock* socket);
 
-			std::vector<const char*> mRecvLog, mSendLog;
+			struct LogEntry
+			{
+				// static string
+				const char* mStr;
+
+				// the size of the associated data or similar.
+				u64 mSize;
+
+				// a general purpose string for extra/dynamic information.
+				std::string mExtra;
+			};
+
+			std::vector<LogEntry> mRecvLog, mSendLog;
 
 			template<typename Sock>
 			macoro::task<> receiveDataTask(Sock* socket);
@@ -691,14 +703,14 @@ namespace coproto
 						// to store it. We will store the continuation
 						// in the scheduler. Once the matching recv request
 						// arrives, we will resume.
-						RECV_LOG("getRequestedRecvSocketFork::idle");
+						RECV_LOG("getRequestedRecvSocketFork::idle", 0, {});
 						mSched.mRecvStatus = SockScheduler::Status::RequestedRecvOp;
 						mHandle = h;
 						mSched.mGetRequestedRecvSocketFork = this;
 					}
 					else
 					{
-						RECV_LOG("getRequestedRecvSocketFork::resume");
+						RECV_LOG("getRequestedRecvSocketFork::resume", 0, {});
 
 						mRes = macoro::Ok(&fork.front_recv(lock));
 						fork.front_recv(lock).setStatus(RecvOperation::Status::InProgress);
@@ -781,7 +793,7 @@ namespace coproto
 						(void)mLogging;
 						(void)mRecvLog;
 
-						RECV_LOG("anyRecvOp::idle");
+						RECV_LOG("anyRecvOp::idle", 0, {});
 						mSched.mRecvStatus = SockScheduler::Status::Idle;
 						mSched.mAnyRecvOp = this;
 						mHandle = h;
@@ -820,7 +832,7 @@ namespace coproto
 					std::exchange(ec, {})))
 					break;
 
-				RECV_LOG("new-recv");
+				RECV_LOG("new-recv", 0, {});
 
 				Header header;
 
@@ -831,29 +843,53 @@ namespace coproto
 				while (true)
 				{
 					// recev the header
-					RECV_LOG("recving-header");
+					RECV_LOG("recving-header", 0, {});
 					std::tie(ec, bt) = co_await sock->recv(asSpan(header), mRecvToken);
 					mBytesReceived += bt;
 					if (checkRecv(ec, bt, sizeof(header)))
+					{
+						RECV_LOG("recved-header: error.", bt,
+							"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+							std::to_string(sizeof(header))
+						);
 						goto Next;
+					}
+					else
+					{
+						RECV_LOG("recved-header", bt, {});
+					}
 
 					// the message size will be zero if its meta-data
 					if (header.mSize == 0)
 					{
-						RECV_LOG("recving-header-meta");
+						RECV_LOG("recving-header-meta", 0, {});
 
 						ControlBlock metadata;
 						std::tie(ec, bt) = co_await sock->recv(asSpan(metadata), mRecvToken);
 						mBytesReceived += bt;
 						if (checkRecv(ec, bt, sizeof(metadata)))
+						{
+							RECV_LOG("recved-header-meta: error.", bt,
+								"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+								std::to_string(sizeof(header)));
 							goto Next;
+						}
+						else
+						{
+							RECV_LOG("recved-header-meta", bt, {});
+						}
 
 						auto slotId = header.mForkId;
 						auto sid = metadata.getSessionID();
 						auto lock = Lock(mMutex);
 						ec = initRemoteSocketFork(slotId, sid, lock);
 						if (ec)
+						{
+							RECV_LOG("initRemoteSocketFork: error.", 0, 
+								"ec=" + ec.message() + ", slotId=" + std::to_string(slotId) +
+								", sid=" + sid.toString());
 							goto Next;
+						}
 					}
 					else
 					{
@@ -861,10 +897,12 @@ namespace coproto
 					}
 				}
 
-				RECV_LOG("getRequestedRecvSocketFork-enter");
+				RECV_LOG("getRequestedRecvSocketFork-enter", 0, {});
 				auto opRes = co_await getRequestedRecvSocketFork(header.mForkId);
 				if (opRes.has_error())
 				{
+					RECV_LOG("getRequestedRecvSocketFork: error.", 0,
+						"ec=" + opRes.error().message() + ", forkId=" + std::to_string(header.mForkId));
 					ec = opRes.error();
 					goto Next;
 				}
@@ -875,19 +913,29 @@ namespace coproto
 				if (buffer.size() != header.mSize)
 				{
 					ec = code::badBufferSize;
+					RECV_LOG("recved-header: error, Bad buffer size.", header.mSize, 
+						"ec=" + ec.message() + ", expected: " + std::to_string(buffer.size()) + 
+						", header: " + std::to_string(header.mSize)
+					);
 					goto Next;
 				}
 
 
-				RECV_LOG("recving-body");
+				RECV_LOG("recving-body", header.mSize, {});
 				std::tie(ec, bt) = co_await sock->recv(buffer, mRecvToken);
 				mBytesReceived += bt;
 
 				if (checkRecv(ec, bt, buffer.size()))
+				{
+					RECV_LOG("recved-body: error.", bt,
+						"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+						std::to_string(buffer.size()));
 					goto Next;
-
-				RECV_LOG("recv-done");
-
+				}
+				else
+				{
+					RECV_LOG("recved-body", bt, {});
+				}
 			}
 
 		}
@@ -1005,7 +1053,7 @@ namespace coproto
 
 				if (opRes.has_error())
 					break;
-				SEND_LOG("new-send");
+				SEND_LOG("new-send", 0, {});
 
 				op = opRes.value();
 				auto& fork = op->fork();
@@ -1018,7 +1066,7 @@ namespace coproto
 
 				if (fork.mInitiated == false)
 				{
-					SEND_LOG("meta");
+					SEND_LOG("meta", 0, {});
 
 					struct SendControlBlock
 					{
@@ -1034,34 +1082,58 @@ namespace coproto
 					meta.mCtrlBlk.setSessionID(fork.mSessionID);
 
 					std::tie(ec, bt) = co_await sock->send(asSpan(meta), mSendToken);
-					SEND_LOG("meta-sent");
 
 					mBytesSent += bt;
 					if (checkSend(ec, bt, sizeof(meta)))
+					{
+						SEND_LOG("meta-sent: error", bt, 
+							"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+							std::to_string(sizeof(meta)));
 						continue;
+					}
+					else
+					{
+						SEND_LOG("meta-sent", bt, {});
+					}
 				}
 
 				Header header;
 				header.mForkId = fork.mLocalId;
 				header.mSize = static_cast<u32>(data.size());
-				SEND_LOG("sending-header");
+				SEND_LOG("sending-header", asSpan(header).size(), {});
 
 				std::tie(ec, bt) = co_await sock->send(asSpan(header), mSendToken);
 				mBytesSent += bt;
 				if (checkSend(ec, bt, sizeof(header)))
+				{
+					SEND_LOG("sending-header: error", bt,
+						"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+						std::to_string(sizeof(header)));
 					continue;
+				}
+				else
+				{
+					SEND_LOG("sending-header-done", bt, {});
+				}
 
-				SEND_LOG("sending-body");
+				SEND_LOG("sending-body", data.size(), {});
 				std::tie(ec, bt) = co_await sock->send(data, mSendToken);
 				mBytesSent += bt;
 
 				if (checkSend(ec, bt, data.size()))
+				{
+					SEND_LOG("sending-body: error", bt,
+						"ec=" + ec.message() + ", bt=" + std::to_string(bt) + " expected:" +
+						std::to_string(data.size()));
 					continue;
-
-				SEND_LOG("send-done");
+				}
+				else
+				{
+					SEND_LOG("sending-body-done", bt, {});
+				}
 			}
 
-			SEND_LOG("exit");
+			SEND_LOG("exit", 0, {});
 		}
 
 

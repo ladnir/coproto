@@ -69,7 +69,7 @@ if(COPROTO_ASAN)
     else()
         target_compile_options(coproto PRIVATE 
             "-fsanitize=address")
-        target_link_options(coproto PUBLIC "-fsanitize=address")
+        target_link_options(coproto PUBLIC  $<$<COMPILE_LANGUAGE:CXX>:-fsanitize=address>)
     endif()
 endif()
 

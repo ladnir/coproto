@@ -343,7 +343,7 @@ namespace coproto
 
 			MvSendBuffer<Container> getBuffer()
 			{
-				return MvSendBuffer<Container>(std::move(mContainer), &this->mExPtr);
+				return MvSendBuffer<Container>(std::move(mContainer), nullptr);
 			}
 		};
 

@@ -2,11 +2,11 @@
 #include "macoro/wrap.h"
 
 #ifdef COPROTO_SOCK_LOGGING
-#define RECV_LOG(X) if(mLogging) mRecvLog.push_back(X)
-#define SEND_LOG(X) if(mLogging) mSendLog.push_back(X)
+#define RECV_LOG(X, S, M) if(mLogging) mRecvLog.push_back(SockScheduler::LogEntry{X, S, M});
+#define SEND_LOG(X, S, M) if(mLogging) mSendLog.push_back(SockScheduler::LogEntry{X, S, M});
 #else
-#define RECV_LOG(X)
-#define SEND_LOG(X)
+#define RECV_LOG(X, S, M)
+#define SEND_LOG(X, S, M)
 #endif
 
 namespace coproto {
@@ -219,7 +219,7 @@ namespace coproto {
 				auto iter = mSendBufferBegin;
 				mSendBufferBegin = nullptr;
 				mSendBufferLast = nullptr;
-				SEND_LOG("close");
+				SEND_LOG("close", 0, {});
 
 				while (iter)
 				{
@@ -235,12 +235,12 @@ namespace coproto {
 			}
 			else
 			{
-				SEND_LOG("try-close");
+				SEND_LOG("try-close", 0, {});
 			}
 
 			if (c == Caller::Recver)
 			{
-				RECV_LOG("close");
+				RECV_LOG("close", 0, {});
 				mRecvStatus = Status::Closed;
 				for (auto& fork : mSocketForks_)
 				{
@@ -256,7 +256,7 @@ namespace coproto {
 			}
 			else
 			{
-				RECV_LOG("try-close");
+				RECV_LOG("try-close", 0, {});
 			}
 		}
 
