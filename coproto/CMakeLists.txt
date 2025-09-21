@@ -18,7 +18,7 @@ target_include_directories(coproto PUBLIC
 if(NOT MSVC)
     target_compile_options(coproto PRIVATE "-Wfatal-errors")#
 else()
-    target_compile_definitions(coproto PUBLIC "_ENABLE_EXTENDED_ALIGNED_STORAGE=1")
+    target_compile_definitions(coproto PUBLIC $<$<COMPILE_LANGUAGE:CXX>:_ENABLE_EXTENDED_ALIGNED_STORAGE=1>)
 endif()
 
 target_link_libraries(coproto Threads::Threads)
