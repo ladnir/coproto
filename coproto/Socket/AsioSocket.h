@@ -33,11 +33,11 @@ namespace coproto
 		struct GlobalIOContext
 		{
 			boost::asio::io_context mIoc;
-			optional<boost::asio::io_context::work> mWork;
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> mWork;
 			std::vector<std::thread> mThreads;
 
 			GlobalIOContext()
-				:mWork(mIoc)
+				:mWork(boost::asio::make_work_guard(mIoc))
 				, mThreads(2)
 			{
 				for (auto& thrd : mThreads)
@@ -595,7 +595,7 @@ namespace coproto
 		AsioAcceptor(
 			std::string address,
 			boost::asio::io_context& ioc,
-			int numConnection = boost::asio::socket_base::max_connections)
+			int numConnection = boost::asio::socket_base::max_listen_connections)
 			: mAcceptor(boost::asio::make_strand(ioc))
 			, mIoc(ioc)
 		{
@@ -608,11 +608,13 @@ namespace coproto
 			{
 				auto prefix = address.substr(0, i);
 				auto posfix = address.substr(i + 1);
-				endpoint = *resolver.resolve(prefix, posfix);
+				auto results = resolver.resolve(prefix, posfix);
+				endpoint = *results.begin();
 			}
 			else
 			{
-				endpoint = *resolver.resolve(address);
+				auto results = resolver.resolve(address, "0");
+				endpoint = *results.begin();
 			}
 
 			mAcceptor.open(endpoint.protocol());
@@ -795,7 +797,7 @@ namespace coproto
 #endif
 		void await_suspend(coroutine_handle<> h)
 		{
-			mIoc.post([h] {h.resume(); });
+			boost::asio::post(mIoc, [h] {h.resume(); });
 		}
 		void await_resume() {}
 	};
@@ -821,8 +823,8 @@ namespace coproto
 		std::atomic<char> mCancellationRequested, mSynchronousFlag, mStarted;
 		bool mRetryOnFailure;
 
-		boost::posix_time::time_duration mRetryDelay;
-		boost::asio::deadline_timer mTimer;
+		std::chrono::milliseconds mRetryDelay;
+		boost::asio::steady_timer mTimer;
 
 		coroutine_handle<> mHandle;
 		//enum class Status
@@ -854,7 +856,7 @@ namespace coproto
 			, mSynchronousFlag(0)
 			, mStarted(0)
 			, mRetryOnFailure(retryOnFailure)
-			, mRetryDelay(boost::posix_time::milliseconds(1))
+			, mRetryDelay(std::chrono::milliseconds(1))
 			, mTimer(ioc)
 		{
 
@@ -868,11 +870,13 @@ namespace coproto
 			{
 				auto prefix = address.substr(0, i);
 				auto posfix = address.substr(i + 1);
-				mEndpoint = *resolver.resolve(prefix, posfix);
+				auto results = resolver.resolve(prefix, posfix);
+				mEndpoint = *results.begin();
 			}
 			else
 			{
-				mEndpoint = *resolver.resolve(address);
+				auto results = resolver.resolve(address, "0");
+				mEndpoint = *results.begin();
 			}
 		}
 
@@ -887,7 +891,7 @@ namespace coproto
 			, mSynchronousFlag(0)
 			, mStarted(0)
 			, mRetryOnFailure(a.mRetryOnFailure)
-			, mRetryDelay(boost::posix_time::milliseconds(1))
+			, mRetryDelay(std::chrono::milliseconds(1))
 			, mTimer(std::move(a.mTimer))
 		{
 			if (a.mStarted)
@@ -1040,15 +1044,15 @@ namespace coproto
 
 		void retry()
 		{
-			mTimer.expires_from_now(mRetryDelay);
+			mTimer.expires_after(mRetryDelay);
 			mTimer.async_wait(
 				boost::asio::bind_cancellation_slot(
 					mCancelSignal.slot(), 
 					[this](error_code ec) {
 					mSynchronousFlag = 0;
-					mRetryDelay = std::min<boost::posix_time::time_duration>(
+					mRetryDelay = std::min(
 						mRetryDelay * 2,
-						boost::posix_time::milliseconds(1000)
+						std::chrono::milliseconds(1000)
 						);
 						
 #ifdef COPROTO_ASIO_LOG
@@ -1351,15 +1355,15 @@ namespace coproto
 
 		void retry()
 		{
-			mConnector.mTimer.expires_from_now(mConnector.mRetryDelay);
+			mConnector.mTimer.expires_after(mConnector.mRetryDelay);
 			mConnector.mTimer.async_wait(
 				boost::asio::bind_cancellation_slot(
 					mConnector.mCancelSignal.slot(), 
 					[this](error_code ec) {
 					mConnector.mSynchronousFlag = 2;
-					mConnector.mRetryDelay = std::min<boost::posix_time::time_duration>(
+					mConnector.mRetryDelay = std::min(
 						mConnector.mRetryDelay * 2,
-						boost::posix_time::milliseconds(1000)
+						std::chrono::milliseconds(1000)
 						);
 						
 #ifdef COPROTO_ASIO_LOG
