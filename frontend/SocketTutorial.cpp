@@ -356,7 +356,7 @@ namespace {
 
 		std::vector<std::thread> thrds(4);
 		// when w is destroyed the threads will return;
-		optional<boost::asio::io_context::work> w(ioc);
+		optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 		for (auto& t : thrds)
 			t = std::thread([&] {ioc.run(); });
 

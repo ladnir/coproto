@@ -12,7 +12,7 @@ namespace coproto
 		void AsioSocket_Accept_test()
 		{
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 			auto f = std::async([&] { ioc.run(); });
 
 			std::string address("localhost:1212");
@@ -35,7 +35,7 @@ namespace coproto
 		{
 
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 			auto f = std::async([&] { ioc.run(); });
 			std::string address("localhost:1212");
 			AsioAcceptor a(address, ioc);
@@ -72,7 +72,7 @@ namespace coproto
 		{
 
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 			auto f = std::async([&] { ioc.run(); });
 			std::string address("localhost:1212");
 
@@ -193,7 +193,7 @@ namespace coproto
 			u64 trials = 50;
 			u64 numOps = 50;
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 
 			std::vector<std::thread> thrds(4);
 			for (auto& t : thrds)
@@ -364,7 +364,7 @@ namespace coproto
 			u64 trials = cmd.getOr("trials", 100);
 			u64 numOps = 20;
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 
 			std::vector<std::thread> thrds(40);
 			for (auto& t : thrds)
@@ -557,7 +557,7 @@ namespace coproto
 			u64 trials = 100;
 			// u64 numOps = 20;
 			boost::asio::io_context ioc;
-			optional<boost::asio::io_context::work> w(ioc);
+			optional<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> w(boost::asio::make_work_guard(ioc));
 
 			std::vector<std::thread> thrds(4);
 			for (auto& t : thrds)
