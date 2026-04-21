@@ -29,6 +29,31 @@ namespace coproto
 				EvalTypes::Buffering
 				//EvalTypes::blocking
 			};
+
+			struct timeout_timing_state
+			{
+				std::chrono::time_point<std::chrono::steady_clock> start, end;
+			};
+
+			template<typename Sock>
+			auto task14_timeout_proto(Sock& s, macoro::stop_token token, timeout_timing_state* state) -> task<void>
+			{
+				MC_BEGIN(task<>, &s, token, state, i = int{});
+				state->start = std::chrono::steady_clock::now();
+				MC_AWAIT(s.recv(i, token));
+				state->end = std::chrono::steady_clock::now();
+				MC_END();
+			}
+
+			struct thread_joiner
+			{
+				std::thread& thread;
+				~thread_joiner()
+				{
+					if (thread.joinable())
+						thread.join();
+				}
+			};
 		}
 
 		void task14_proto_test()
@@ -1159,38 +1184,40 @@ namespace coproto
 			for (auto t : types)
 			{
 				macoro::stop_source src;
-				struct timing_state
-				{
-					std::chrono::time_point<std::chrono::steady_clock> start, end;
-				} states[2];
-				struct timeout_proto
-				{
-					macoro::stop_token token;
-					std::chrono::time_point<std::chrono::steady_clock>* start;
-					std::chrono::time_point<std::chrono::steady_clock>* end;
-
-					auto operator()(Socket& s, bool) -> macoro::task<void>
-					{
-						int i = 0;
-						*start = std::chrono::steady_clock::now();
-						co_await s.recv(i, token);
-						*end = std::chrono::steady_clock::now();
-					}
-				};
+				timeout_timing_state states[2];
+				auto token = src.get_token();
 				auto stopper = std::thread([src]() mutable {
 					std::this_thread::sleep_for(std::chrono::milliseconds(15));
 					src.request_stop();
 				});
+				thread_joiner joiner{ stopper };
 				auto isExpected = [](error_code ec)
 				{
 					return ec == code::operation_aborted || ec == code::remoteClosed;
 				};
+				auto run = [&]() {
+					if (t == EvalTypes::async)
+					{
+						auto s = LocalAsyncSocket::makePair();
+						auto w = macoro::when_all_ready(
+							task14_timeout_proto(s[0], token, &states[0]),
+							task14_timeout_proto(s[1], token, &states[1]));
+						return macoro::sync_wait(std::move(w));
+					}
+					else
+					{
+						std::array<BufferingSocket, 2> s;
+						auto blocking = macoro::when_all_ready(
+							task14_timeout_proto(s[0], token, &states[0]),
+							task14_timeout_proto(s[1], token, &states[1]))
+							| macoro::make_blocking();
 
-				timeout_proto p0{ src.get_token(), &states[0].start, &states[0].end };
-				timeout_proto p1{ src.get_token(), &states[1].start, &states[1].end };
+						BufferingSocket::exchangeMessages(s[0], s[1]);
+						return blocking.get();
+					}
+				};
 
-				auto r = eval(p0, p1, t);
-				stopper.join();
+				auto r = run();
 				for (auto& state : states)
 				{
 					auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(state.end - state.start).count();
