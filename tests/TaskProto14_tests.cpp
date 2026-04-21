@@ -29,6 +29,31 @@ namespace coproto
 				EvalTypes::Buffering
 				//EvalTypes::blocking
 			};
+
+			struct timeout_timing_state
+			{
+				std::chrono::time_point<std::chrono::steady_clock> start, end;
+			};
+
+			template<typename Sock>
+			auto task14_timeout_proto(Sock& s, macoro::stop_token token, timeout_timing_state* state) -> task<void>
+			{
+				MC_BEGIN(task<>, &s, token, state, i = int{});
+				state->start = std::chrono::steady_clock::now();
+				MC_AWAIT(s.recv(i, token));
+				state->end = std::chrono::steady_clock::now();
+				MC_END();
+			}
+
+			struct thread_joiner
+			{
+				std::thread& thread;
+				~thread_joiner()
+				{
+					if (thread.joinable())
+						thread.join();
+				}
+			};
 		}
 
 		void task14_proto_test()
@@ -1156,41 +1181,56 @@ namespace coproto
 		void task14_timeout_test()
 		{
 			auto maxLag = 20;
-			macoro::stop_source src;
-			auto token = src.get_token();
-			static macoro::thread_pool ios;
-			auto w = ios.make_work();
-			ios.create_thread();
-			static std::chrono::time_point<std::chrono::steady_clock> start, end;
-			auto proto = [](Socket& s, bool party) -> task<void>
-				{
-					MC_BEGIN(task<>, s, i = int{});
-
-					start = std::chrono::steady_clock::now();
-					MC_AWAIT(s.recv(i, macoro::timeout(ios, std::chrono::milliseconds(15))));
-					end = std::chrono::steady_clock::now();
-
-					MC_END();
-				};
-
 			for (auto t : types)
 			{
+				macoro::stop_source src;
+				timeout_timing_state states[2];
+				auto token = src.get_token();
+				auto stopper = std::thread([src]() mutable {
+					std::this_thread::sleep_for(std::chrono::milliseconds(15));
+					src.request_stop();
+				});
+				thread_joiner joiner{ stopper };
+				auto isExpected = [](error_code ec)
+				{
+					return ec == code::operation_aborted || ec == code::remoteClosed;
+				};
+				auto run = [&]() {
+					if (t == EvalTypes::async)
+					{
+						auto s = LocalAsyncSocket::makePair();
+						auto w = macoro::when_all_ready(
+							task14_timeout_proto(s[0], token, &states[0]),
+							task14_timeout_proto(s[1], token, &states[1]));
+						return macoro::sync_wait(std::move(w));
+					}
+					else
+					{
+						std::array<BufferingSocket, 2> s;
+						auto blocking = macoro::when_all_ready(
+							task14_timeout_proto(s[0], token, &states[0]),
+							task14_timeout_proto(s[1], token, &states[1]))
+							| macoro::make_blocking();
 
-				auto r = eval(proto, t);
+						BufferingSocket::exchangeMessages(s[0], s[1]);
+						return blocking.get();
+					}
+				};
 
-				auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-				//std::cout << "time " <<  << "ms" << std::endl;
-
-				if (dur > 15 + maxLag)
-					throw MACORO_RTE_LOC;
+				auto r = run();
+				for (auto& state : states)
+				{
+					auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(state.end - state.start).count();
+					if (dur > 15 + maxLag)
+						throw MACORO_RTE_LOC;
+				}
 
 				try {
 					std::get<0>(r).result(); 
 					throw MACORO_RTE_LOC;
 				}
 				catch (std::system_error& e) {
-
-					if (e.code() != code::operation_aborted)
+					if (!isExpected(e.code()))
 					{
 						std::cout << e.code().category().name() << std::endl;
 						std::cout << e.code().message() << std::endl;
@@ -1202,22 +1242,10 @@ namespace coproto
 					throw MACORO_RTE_LOC;
 				}
 				catch (std::system_error& e) {
-					auto ec = e.code();
-					if (t == EvalTypes::async)
-					{
-						if (ec != code::remoteClosed)
-							throw;
-					}
-					else
-					{
-						if (ec != code::operation_aborted)
-							throw;
-					}
+					if (!isExpected(e.code()))
+						throw;
 				}
 			}
-
-			w = {};
-			ios.join();
 		}
 
 	}

@@ -81,6 +81,7 @@ namespace coproto
 			SessionID mId;
 			macoro::stop_token mToken;
 			std::exception_ptr mExPtr;
+			std::source_location mLoc{};
 			SendAwaiterBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
 				: mSock(s)
 				, mId(sid)
@@ -91,6 +92,7 @@ namespace coproto
 				: mSock(other.mSock)
 				, mId(other.mId)
 				, mToken(std::move(other.mToken))
+				, mLoc(other.mLoc)
 			{
 				assert(!other.mExPtr);
 			}
@@ -101,18 +103,23 @@ namespace coproto
 				return false;
 			}
 
+			void set_await_location(std::source_location loc) noexcept
+			{
+				mLoc = loc;
+			}
+
 #ifdef COPROTO_CPP20
 			template<typename promise>
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h)
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 				return mSock->send(mId, self().getBuffer(), coroutine_handle<>(h), std::move(mToken)).std_cast();
 			}
 #endif
 			template<typename promise>
-			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h)
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 				return mSock->send(mId, self().getBuffer(), h, std::move(mToken));
 			}
 
@@ -142,6 +149,7 @@ namespace coproto
 			SessionID mId;
 			macoro::stop_token mToken;
 			std::exception_ptr mExPtr;
+			std::source_location mLoc{};
 
 			RecvAwaiterBase(SockScheduler* s, SessionID sid, macoro::stop_token&& token)
 				: mSock(s)
@@ -153,6 +161,7 @@ namespace coproto
 				: mSock(other.mSock)
 				, mId(other.mId)
 				, mToken(std::move(other.mToken))
+				, mLoc(other.mLoc)
 			{
 				assert(!other.mExPtr);
 			}
@@ -161,23 +170,26 @@ namespace coproto
 
 			bool await_ready() { return false; }
 
+			void set_await_location(std::source_location loc) noexcept
+			{
+				mLoc = loc;
+			}
+
 #ifdef COPROTO_CPP20
 			template<typename promise>
 			std::coroutine_handle<> await_suspend(
-				std::coroutine_handle<promise> h,
-				std::source_location loc = std::source_location::current())
+				std::coroutine_handle<promise> h)
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 
 				return mSock->recv(mId, self().getBuffer(), coroutine_handle<>(h), std::move(mToken)).std_cast();
 			}
 #endif
 			template<typename promise>
 			inline coroutine_handle<> await_suspend(
-				coroutine_handle<promise> h, 
-				std::source_location loc = std::source_location::current())
+				coroutine_handle<promise> h)
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 				return mSock->recv(mId, self().getBuffer(), h, std::move(mToken));
 			}
 
@@ -321,15 +333,17 @@ namespace coproto
 
 #ifdef COPROTO_CPP20
 			template<typename promise>
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h)
 			{
+				this->set_parent(macoro::detail::get_traceable(h), this->mLoc);
 				this->mSock->send(this->mId, getBuffer(), macoro::noop_coroutine(), std::move(this->mToken)).resume();
 				return h;
 			}
 #endif
 			template<typename promise>
-			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h)
 			{
+				this->set_parent(macoro::detail::get_traceable(h), this->mLoc);
 				this->mSock->send(this->mId, getBuffer(), macoro::noop_coroutine(), std::move(this->mToken)).resume();
 				return h;
 			}
@@ -352,23 +366,29 @@ namespace coproto
 		{
 		public:
 			SockScheduler* mSock;
+			std::source_location mLoc{};
 			Flush(SockScheduler* s)
 				:mSock(s)
 			{}
 
 			bool await_ready() { return false; }
 
-			template<typename promise>
-			coroutine_handle<> await_suspend(coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			void set_await_location(std::source_location loc) noexcept
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				mLoc = loc;
+			}
+
+			template<typename promise>
+			coroutine_handle<> await_suspend(coroutine_handle<promise> h)
+			{
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 				return mSock->flush(h);
 			}
 #ifdef MACORO_CPP_20
 			template<typename promise>
-			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h, std::source_location loc = std::source_location::current())
+			std::coroutine_handle<> await_suspend(std::coroutine_handle<promise> h)
 			{
-				set_parent(macoro::detail::get_traceable(h), loc);
+				set_parent(macoro::detail::get_traceable(h), mLoc);
 				auto h2 = coroutine_handle<>(h);
 				auto f = mSock->flush(h2);
 				return f.std_cast();
@@ -379,4 +399,3 @@ namespace coproto
 
 	}
 }
-
