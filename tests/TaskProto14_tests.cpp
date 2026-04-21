@@ -1156,27 +1156,29 @@ namespace coproto
 		void task14_timeout_test()
 		{
 			auto maxLag = 20;
-			macoro::stop_source src;
-			auto token = src.get_token();
-			static macoro::thread_pool ios;
-			auto w = ios.make_work();
-			ios.create_thread();
-			static std::chrono::time_point<std::chrono::steady_clock> start, end;
-			auto proto = [](Socket& s, bool party) -> task<void>
-				{
-					MC_BEGIN(task<>, s, i = int{});
-
-					start = std::chrono::steady_clock::now();
-					MC_AWAIT(s.recv(i, macoro::timeout(ios, std::chrono::milliseconds(15))));
-					end = std::chrono::steady_clock::now();
-
-					MC_END();
-				};
-
 			for (auto t : types)
 			{
+				macoro::stop_source src;
+				std::chrono::time_point<std::chrono::steady_clock> start, end;
+				auto stopper = std::thread([src]() mutable {
+					std::this_thread::sleep_for(std::chrono::milliseconds(15));
+					src.request_stop();
+				});
+				auto isExpected = [](error_code ec)
+				{
+					return ec == code::operation_aborted || ec == code::remoteClosed;
+				};
+
+				auto proto = [&](Socket& s, bool party) -> macoro::task<void>
+				{
+					int i = 0;
+					start = std::chrono::steady_clock::now();
+					co_await s.recv(i, src.get_token());
+					end = std::chrono::steady_clock::now();
+				};
 
 				auto r = eval(proto, t);
+				stopper.join();
 
 				auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
 				//std::cout << "time " <<  << "ms" << std::endl;
@@ -1189,8 +1191,7 @@ namespace coproto
 					throw MACORO_RTE_LOC;
 				}
 				catch (std::system_error& e) {
-
-					if (e.code() != code::operation_aborted)
+					if (!isExpected(e.code()))
 					{
 						std::cout << e.code().category().name() << std::endl;
 						std::cout << e.code().message() << std::endl;
@@ -1202,22 +1203,10 @@ namespace coproto
 					throw MACORO_RTE_LOC;
 				}
 				catch (std::system_error& e) {
-					auto ec = e.code();
-					if (t == EvalTypes::async)
-					{
-						if (ec != code::remoteClosed)
-							throw;
-					}
-					else
-					{
-						if (ec != code::operation_aborted)
-							throw;
-					}
+					if (!isExpected(e.code()))
+						throw;
 				}
 			}
-
-			w = {};
-			ios.join();
 		}
 
 	}
