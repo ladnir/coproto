@@ -1159,7 +1159,10 @@ namespace coproto
 			for (auto t : types)
 			{
 				macoro::stop_source src;
-				std::chrono::time_point<std::chrono::steady_clock> start, end;
+				struct timing_state
+				{
+					std::chrono::time_point<std::chrono::steady_clock> start, end;
+				} states[2];
 				struct timeout_proto
 				{
 					macoro::stop_token token;
@@ -1183,16 +1186,17 @@ namespace coproto
 					return ec == code::operation_aborted || ec == code::remoteClosed;
 				};
 
-				timeout_proto proto{ src.get_token(), &start, &end };
+				timeout_proto p0{ src.get_token(), &states[0].start, &states[0].end };
+				timeout_proto p1{ src.get_token(), &states[1].start, &states[1].end };
 
-				auto r = eval(proto, t);
+				auto r = eval(p0, p1, t);
 				stopper.join();
-
-				auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-				//std::cout << "time " <<  << "ms" << std::endl;
-
-				if (dur > 15 + maxLag)
-					throw MACORO_RTE_LOC;
+				for (auto& state : states)
+				{
+					auto dur = std::chrono::duration_cast<std::chrono::milliseconds>(state.end - state.start).count();
+					if (dur > 15 + maxLag)
+						throw MACORO_RTE_LOC;
+				}
 
 				try {
 					std::get<0>(r).result(); 
