@@ -1160,6 +1160,20 @@ namespace coproto
 			{
 				macoro::stop_source src;
 				std::chrono::time_point<std::chrono::steady_clock> start, end;
+				struct timeout_proto
+				{
+					macoro::stop_token token;
+					std::chrono::time_point<std::chrono::steady_clock>* start;
+					std::chrono::time_point<std::chrono::steady_clock>* end;
+
+					auto operator()(Socket& s, bool) -> macoro::task<void>
+					{
+						int i = 0;
+						*start = std::chrono::steady_clock::now();
+						co_await s.recv(i, token);
+						*end = std::chrono::steady_clock::now();
+					}
+				};
 				auto stopper = std::thread([src]() mutable {
 					std::this_thread::sleep_for(std::chrono::milliseconds(15));
 					src.request_stop();
@@ -1169,13 +1183,7 @@ namespace coproto
 					return ec == code::operation_aborted || ec == code::remoteClosed;
 				};
 
-				auto proto = [&](Socket& s, bool party) -> macoro::task<void>
-				{
-					int i = 0;
-					start = std::chrono::steady_clock::now();
-					co_await s.recv(i, src.get_token());
-					end = std::chrono::steady_clock::now();
-				};
+				timeout_proto proto{ src.get_token(), &start, &end };
 
 				auto r = eval(proto, t);
 				stopper.join();
