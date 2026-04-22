@@ -9,7 +9,7 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "COPROTO_ASAN": "ON",
+        "COPROTO_ASAN": "OFF",
         "COPROTO_FETCH_AUTO": "ON",
         "COPROTO_ENABLE_BOOST": "ON",
         "COPROTO_ENABLE_OPENSSL": false,
