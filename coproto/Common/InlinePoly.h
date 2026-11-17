@@ -126,8 +126,7 @@ namespace coproto
 
 				// Do a placement new to the local storage and then take the
 				// address of the U type and store that in our data pointer.
-				ModelController<U>* ptr = (ModelController<U>*) & getController();
-				new (ptr) ModelController<U>(std::forward<Args>(args)...);
+				auto* ptr = new (static_cast<void*>(&mStorage)) ModelController<U>(std::forward<Args>(args)...);
 				mData = &(ptr->mU);
 			}
 
